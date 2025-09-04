@@ -1,0 +1,467 @@
+{
+  "total_files": 376888,
+  "total_size_gb": 240.9575127530843,
+  "file_types": {
+    ".json": {
+      "count": 6,
+      "size_gb": 0.722731095738709
+    },
+    ".pdf": {
+      "count": 321936,
+      "size_gb": 238.58403287734836
+    },
+    ".msg": {
+      "count": 1169,
+      "size_gb": 0.15076255798339844
+    },
+    ".txt": {
+      "count": 3,
+      "size_gb": 3.6424025893211365e-06
+    },
+    ".xlsx": {
+      "count": 9,
+      "size_gb": 0.04119992721825838
+    },
+    ".log": {
+      "count": 1,
+      "size_gb": 2.784654498100281e-07
+    },
+    ".lnk": {
+      "count": 18,
+      "size_gb": 5.751103162765503e-05
+    },
+    "": {
+      "count": 3,
+      "size_gb": 0.0021338462829589844
+    },
+    ".jpg": {
+      "count": 102,
+      "size_gb": 0.04514629766345024
+    },
+    ".zip": {
+      "count": 1,
+      "size_gb": 0.0011475030332803726
+    },
+    ".xml": {
+      "count": 1,
+      "size_gb": 1.413002610206604e-05
+    },
+    ".xls": {
+      "count": 53630,
+      "size_gb": 1.3733892440795898
+    },
+    ".docx": {
+      "count": 2,
+      "size_gb": 0.0011781519278883934
+    },
+    ".xlsb": {
+      "count": 4,
+      "size_gb": 0.03571543004363775
+    },
+    ".url": {
+      "count": 3,
+      "size_gb": 2.598389983177185e-07
+    }
+  },
+  "directory_structure": {
+    ".": {
+      "count": 6,
+      "size_gb": 0.722731095738709
+    },
+    "Plant Invoices\\P4": {
+      "count": 47738,
+      "size_gb": 41.57727932650596
+    },
+    "Plant Invoices\\P4\\May 2022": {
+      "count": 30,
+      "size_gb": 0.005373417399823666
+    },
+    "Plant Invoices\\P4\\Time sheets": {
+      "count": 8,
+      "size_gb": 0.0018375301733613014
+    },
+    "Plant Invoices\\P5": {
+      "count": 85871,
+      "size_gb": 57.91987526696175
+    },
+    "Plant Invoices\\P5\\08 August 2022 - transfer to site invoice": {
+      "count": 20,
+      "size_gb": 0.004634479992091656
+    },
+    "Plant Invoices\\P5\\April": {
+      "count": 26,
+      "size_gb": 0.03778994455933571
+    },
+    "Plant Invoices\\P5\\April\\Audit": {
+      "count": 1,
+      "size_gb": 0.00010367017239332199
+    },
+    "Plant Invoices\\P5\\April\\Audit\\01_Oct 19 Audit": {
+      "count": 2,
+      "size_gb": 0.003501385450363159
+    },
+    "Plant Invoices\\P5\\April\\Audit\\01_Oct 19 Audit\\Sample Invoices\\S1": {
+      "count": 15,
+      "size_gb": 0.0023022759705781937
+    },
+    "Plant Invoices\\P5\\April\\Audit\\01_Oct 19 Audit\\Sample Invoices\\S2": {
+      "count": 15,
+      "size_gb": 0.0031132781878113747
+    },
+    "Plant Invoices\\P5\\April\\Audit\\03_Nov 2020": {
+      "count": 4,
+      "size_gb": 0.03792939521372318
+    },
+    "Plant Invoices\\P5\\April\\Audit\\03_Nov 2020\\Sample": {
+      "count": 9,
+      "size_gb": 0.03697977401316166
+    },
+    "Plant Invoices\\P5\\June": {
+      "count": 2,
+      "size_gb": 0.0020730597898364067
+    },
+    "Plant Invoices\\P5\\PA - Plant": {
+      "count": 517,
+      "size_gb": 0.1460605701431632
+    },
+    "Plant Invoices\\PA - Plant": {
+      "count": 2666,
+      "size_gb": 0.8257535919547081
+    },
+    "Processed Invoices": {
+      "count": 1,
+      "size_gb": 0.006426810286939144
+    },
+    "Processed Invoices\\2021\\01 - January": {
+      "count": 2569,
+      "size_gb": 2.714984758757055
+    },
+    "Processed Invoices\\2021\\02 - February": {
+      "count": 2816,
+      "size_gb": 2.015360346995294
+    },
+    "Processed Invoices\\2021\\03 - March": {
+      "count": 3216,
+      "size_gb": 2.866468925960362
+    },
+    "Processed Invoices\\2021\\04 - April": {
+      "count": 3643,
+      "size_gb": 3.915057727135718
+    },
+    "Processed Invoices\\2021\\05 - May": {
+      "count": 6568,
+      "size_gb": 3.48760995734483
+    },
+    "Processed Invoices\\2021\\06 - June": {
+      "count": 4144,
+      "size_gb": 3.05399964004755
+    },
+    "Processed Invoices\\2021\\07 - July": {
+      "count": 4569,
+      "size_gb": 3.3279676688835025
+    },
+    "Processed Invoices\\2021\\08 - August": {
+      "count": 13566,
+      "size_gb": 5.455114175565541
+    },
+    "Processed Invoices\\2021\\09 - September": {
+      "count": 4489,
+      "size_gb": 2.3427420845255256
+    },
+    "Processed Invoices\\2021\\10 - October": {
+      "count": 4882,
+      "size_gb": 1.783296843059361
+    },
+    "Processed Invoices\\2021\\11 - November": {
+      "count": 4960,
+      "size_gb": 2.275416168384254
+    },
+    "Processed Invoices\\2021\\12 - December": {
+      "count": 4518,
+      "size_gb": 1.9669421389698982
+    },
+    "Processed Invoices\\2021\\Posted invoices - Material": {
+      "count": 333,
+      "size_gb": 0.4845734154805541
+    },
+    "Processed Invoices\\2021\\Posted invoices - Material\\12 - December 2021": {
+      "count": 430,
+      "size_gb": 0.016648617573082447
+    },
+    "Processed Invoices\\2021\\Posted invoices - Material\\Alex Delivery Tickets": {
+      "count": 112,
+      "size_gb": 0.13142297230660915
+    },
+    "Processed Invoices\\2022": {
+      "count": 3,
+      "size_gb": 0.001138933002948761
+    },
+    "Processed Invoices\\2022\\01 - January": {
+      "count": 3779,
+      "size_gb": 1.5159937525168061
+    },
+    "Processed Invoices\\2022\\02 - February": {
+      "count": 4533,
+      "size_gb": 1.3161698235198855
+    },
+    "Processed Invoices\\2022\\03 - March": {
+      "count": 4169,
+      "size_gb": 2.060710151679814
+    },
+    "Processed Invoices\\2022\\04 - April": {
+      "count": 4232,
+      "size_gb": 2.310319699347019
+    },
+    "Processed Invoices\\2022\\05 - May": {
+      "count": 3548,
+      "size_gb": 1.6927862716838717
+    },
+    "Processed Invoices\\2022\\06 - June": {
+      "count": 3207,
+      "size_gb": 1.6582855023443699
+    },
+    "Processed Invoices\\2022\\07 - July": {
+      "count": 3171,
+      "size_gb": 1.784284488297999
+    },
+    "Processed Invoices\\2022\\08 - August": {
+      "count": 3680,
+      "size_gb": 2.7801252007484436
+    },
+    "Processed Invoices\\2022\\09 - September": {
+      "count": 3854,
+      "size_gb": 2.5732493605464697
+    },
+    "Processed Invoices\\2022\\10 - October": {
+      "count": 4379,
+      "size_gb": 2.264227223582566
+    },
+    "Processed Invoices\\2022\\11 - November": {
+      "count": 4207,
+      "size_gb": 2.143590098246932
+    },
+    "Processed Invoices\\2022\\12 - December": {
+      "count": 3315,
+      "size_gb": 2.0306379897519946
+    },
+    "Processed Invoices\\2023": {
+      "count": 2,
+      "size_gb": 0.002214358188211918
+    },
+    "Processed Invoices\\2023\\01 - January": {
+      "count": 5149,
+      "size_gb": 2.575759770348668
+    },
+    "Processed Invoices\\2023\\02 - February": {
+      "count": 4185,
+      "size_gb": 1.9762587519362569
+    },
+    "Processed Invoices\\2023\\03 - March": {
+      "count": 4421,
+      "size_gb": 2.364416740834713
+    },
+    "Processed Invoices\\2023\\04 - April": {
+      "count": 4894,
+      "size_gb": 2.3271973822265863
+    },
+    "Processed Invoices\\2023\\04 - April\\01 FlexiCapture Rejects": {
+      "count": 12,
+      "size_gb": 0.003123251721262932
+    },
+    "Processed Invoices\\2023\\05 - May": {
+      "count": 5103,
+      "size_gb": 2.472049629315734
+    },
+    "Processed Invoices\\2023\\06 - June": {
+      "count": 3809,
+      "size_gb": 1.9837921569123864
+    },
+    "Processed Invoices\\2023\\07 - July": {
+      "count": 5061,
+      "size_gb": 2.349349608644843
+    },
+    "Processed Invoices\\2023\\08 - August": {
+      "count": 4343,
+      "size_gb": 2.0849705627188087
+    },
+    "Processed Invoices\\2023\\09 - September": {
+      "count": 4195,
+      "size_gb": 2.1717651672661304
+    },
+    "Processed Invoices\\2023\\10 - October": {
+      "count": 4344,
+      "size_gb": 2.14932073187083
+    },
+    "Processed Invoices\\2023\\11 - November": {
+      "count": 5295,
+      "size_gb": 2.9146655406802893
+    },
+    "Processed Invoices\\2023\\12 - December": {
+      "count": 4376,
+      "size_gb": 2.410757732577622
+    },
+    "Processed Invoices\\2024\\01 - January": {
+      "count": 4266,
+      "size_gb": 2.2268561283126473
+    },
+    "Processed Invoices\\2024\\02 - February": {
+      "count": 5129,
+      "size_gb": 2.2863950384780765
+    },
+    "Processed Invoices\\2024\\03 - March": {
+      "count": 4493,
+      "size_gb": 3.5694594476372004
+    },
+    "Processed Invoices\\2024\\04 - April": {
+      "count": 5064,
+      "size_gb": 3.7591225737705827
+    },
+    "Processed Invoices\\2024\\05 - May": {
+      "count": 5138,
+      "size_gb": 4.079889162443578
+    },
+    "Processed Invoices\\2024\\06 - June": {
+      "count": 5462,
+      "size_gb": 3.43969289958477
+    },
+    "Processed Invoices\\2024\\07 - July": {
+      "count": 6700,
+      "size_gb": 5.247374372556806
+    },
+    "Processed Invoices\\2024\\08 - August": {
+      "count": 2923,
+      "size_gb": 2.8518105130642653
+    },
+    "Processed Invoices\\2024\\09 - September": {
+      "count": 2574,
+      "size_gb": 2.557005064561963
+    },
+    "Processed Invoices\\2024\\10 - October": {
+      "count": 4035,
+      "size_gb": 3.9286779342219234
+    },
+    "Processed Invoices\\2024\\11 - November": {
+      "count": 3547,
+      "size_gb": 2.2783675510436296
+    },
+    "Processed Invoices\\2024\\12 - December": {
+      "count": 4232,
+      "size_gb": 2.6307719219475985
+    },
+    "Processed Invoices\\2025": {
+      "count": 1,
+      "size_gb": 0.001291576772928238
+    },
+    "Processed Invoices\\2025\\01 - January": {
+      "count": 546,
+      "size_gb": 0.3909172862768173
+    },
+    "Processed Invoices\\2025\\02 - February": {
+      "count": 4719,
+      "size_gb": 2.273590792901814
+    },
+    "Processed Invoices\\2025\\03 - March": {
+      "count": 4619,
+      "size_gb": 2.5437748627737164
+    },
+    "Processed Invoices\\2025\\04 - April": {
+      "count": 4199,
+      "size_gb": 2.3599450597539544
+    },
+    "Processed Invoices\\2025\\05 - May": {
+      "count": 3472,
+      "size_gb": 1.8454705020412803
+    },
+    "Processed Invoices\\2025\\06 - June": {
+      "count": 3184,
+      "size_gb": 1.8505943967029452
+    },
+    "Processed Invoices\\2025\\07 - July": {
+      "count": 3570,
+      "size_gb": 1.7448421595618129
+    },
+    "Test": {
+      "count": 3,
+      "size_gb": 0.003133314661681652
+    }
+  },
+  "migration_estimate": {
+    "estimated_duration_hours": 24.09575127530843,
+    "onelake_storage_cost_estimate": "$5.54/month",
+    "recommended_batch_size": 1000
+  },
+  "files_by_date": {},
+  "largest_files": [],
+  "top_file_types": [
+    [
+      ".pdf",
+      {
+        "count": 321936,
+        "size_gb": 238.58403287734836
+      }
+    ],
+    [
+      ".xls",
+      {
+        "count": 53630,
+        "size_gb": 1.3733892440795898
+      }
+    ],
+    [
+      ".json",
+      {
+        "count": 6,
+        "size_gb": 0.722731095738709
+      }
+    ],
+    [
+      ".msg",
+      {
+        "count": 1169,
+        "size_gb": 0.15076255798339844
+      }
+    ],
+    [
+      ".jpg",
+      {
+        "count": 102,
+        "size_gb": 0.04514629766345024
+      }
+    ],
+    [
+      ".xlsx",
+      {
+        "count": 9,
+        "size_gb": 0.04119992721825838
+      }
+    ],
+    [
+      ".xlsb",
+      {
+        "count": 4,
+        "size_gb": 0.03571543004363775
+      }
+    ],
+    [
+      "",
+      {
+        "count": 3,
+        "size_gb": 0.0021338462829589844
+      }
+    ],
+    [
+      ".docx",
+      {
+        "count": 2,
+        "size_gb": 0.0011781519278883934
+      }
+    ],
+    [
+      ".zip",
+      {
+        "count": 1,
+        "size_gb": 0.0011475030332803726
+      }
+    ]
+  ]
+}

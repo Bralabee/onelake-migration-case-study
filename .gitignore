@@ -1,0 +1,206 @@
+# SharePoint Download Automation - Git Ignore File
+# ================================================
+
+# 🔒 SECURITY: Environment and Configuration Files
+.env
+.env.local
+.env.production
+.env.staging
+.env.backup
+*.env
+env_vars.env
+
+# 📁 Downloaded Files and Cache
+downloaded_files/
+file_list_cache.json
+download_progress.json
+download_progress_turbo.json
+*.cache
+cache/
+
+# 🐍 Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 🧪 Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+cover/
+htmlcov/
+
+# 📊 Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# 🔧 IDEs and Editors
+.vscode/settings.json
+.vscode/launch.json
+.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# 📝 Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# 🗃️ Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# 📦 Package Managers
+node_modules/
+.npm
+.yarn-integrity
+
+# 🌐 Web
+.sass-cache/
+.connect.lock
+.nyc_output
+
+# 🔄 Temporary Files
+*.tmp
+*.temp
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 🏗️ Build Tools
+.gradle/
+build/
+target/
+
+# 📋 Office Files (temporary)
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# 🔐 SSL Certificates
+*.pem
+*.key
+*.crt
+*.cert
+
+# 💾 Backup Files
+*.backup
+*.bak
+*.old
+
+# 🚀 Deployment
+.vercel
+.netlify
+
+# 📈 Analytics and Monitoring
+.env.analytics
+
+# 🔧 Local Configuration
+config.local.json
+settings.local.json
+
+# 📊 Data Files (optional - uncomment if you don't want to track data)
+# *.csv
+# *.json
+# *.xml
+# *.parquet
+
+# 🧹 System Files
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# 📱 Mobile
+*.mobileprovision
+*.dSYM.zip
+*.dSYM
+
+# 🎯 Project Specific
+# Add any project-specific files or patterns here
+invoice_txt.pkl
+*.pkl
+
+# 🌍 Environment Management
+.conda/
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# 🔍 Search Index Files
+.vscode/settings.json
+
+# 📊 Progress and Status Files
+status.json
+progress.txt
+checkpoint.json
+
+# 🔄 Sync Files
+.sync/
+sync.lock
+
+# 📋 SharePoint Specific
+sharepoint_cache/
+sp_temp/
+temp_downloads/
+
+# 🏃‍♂️ Runtime Files
+*.pid
+*.seed
+*.pid.lock
+
+# 📦 Compressed Files (if auto-generated)
+# *.zip
+# *.tar.gz
+# *.rar
+
+# 📝 Documentation Build
+docs/_build/
+site/
+
+# 🔧 Tool Configurations
+.tool-versions
+.nvmrc
+
+# Keep important files (add ! prefix to force include)
+!.env.template
+!.env.example
+!README.md
+!requirements.txt
+!environment.yml
+!Makefile

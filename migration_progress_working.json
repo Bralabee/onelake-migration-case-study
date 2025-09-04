@@ -1,0 +1,15 @@
+{
+  "total_files": 1,
+  "uploaded_files": 1,
+  "failed_files": 0,
+  "completed_files": {
+    "test_upload/test_api_working.py": {
+      "status": "completed",
+      "size": 8485,
+      "timestamp": 1754648717.1635153
+    }
+  },
+  "failed_files_list": [],
+  "start_time": 1754648716.4996438,
+  "last_update": 1754648717.1635153
+}

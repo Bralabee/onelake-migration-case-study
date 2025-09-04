@@ -1,0 +1,35 @@
+# Requirements for Optimized OneLake Migrator
+# High-performance dependencies for large-scale file migration
+
+# Core async HTTP libraries
+aiohttp>=3.9.0          # Async HTTP client for parallel uploads
+aiofiles>=23.2.0        # Async file I/O operations
+
+# Data processing
+pandas>=2.0.0           # Data analysis and metadata handling
+numpy>=1.24.0           # Numerical operations
+
+# HTTP and API clients
+requests>=2.31.0        # Synchronous HTTP client for authentication
+urllib3>=2.0.0          # HTTP library base
+
+# Environment and configuration
+python-dotenv>=1.0.0    # Environment variable management
+
+# Authentication and security
+msal>=1.24.0           # Microsoft Authentication Library (alternative)
+cryptography>=41.0.0   # Encryption and security functions
+
+# Progress and monitoring
+tqdm>=4.66.0           # Progress bars for long operations
+rich>=13.0.0           # Rich text and beautiful formatting
+
+# Performance optimization
+uvloop>=0.19.0         # High-performance event loop (Unix only)
+orjson>=3.9.0          # Fast JSON parsing
+asyncio-throttle>=1.0.2 # Rate limiting for async operations
+
+# Development and debugging
+pytest>=7.4.0          # Testing framework
+pytest-asyncio>=0.21.0 # Async testing support
+black>=23.0.0          # Code formatting
