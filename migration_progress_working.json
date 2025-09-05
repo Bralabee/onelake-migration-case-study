@@ -1,15 +1,21 @@
 {
   "total_files": 1,
-  "uploaded_files": 1,
-  "failed_files": 0,
+  "uploaded_files": 2,
+  "failed_files": 1,
   "completed_files": {
     "test_upload/test_api_working.py": {
       "status": "completed",
       "size": 8485,
-      "timestamp": 1754648717.1635153
+      "timestamp": 1757076012.5348418
     }
   },
-  "failed_files_list": [],
-  "start_time": 1754648716.4996438,
-  "last_update": 1754648717.1635153
+  "failed_files_list": [
+    {
+      "path": "test_upload/test_api_working.py",
+      "error": "Create failed: HTTP 401 - {\"error\":{\"code\":\"Unauthorized\",\"message\":\"Authentication Failed with Access token validation failed.\"}}",
+      "timestamp": 1757075958.0580194
+    }
+  ],
+  "start_time": 1757076011.534062,
+  "last_update": 1757076012.5348418
 }

@@ -1,0 +1,21 @@
+# Consolidated dependencies for Commercial_ACA_taskforce project
+# Generated from environment.yml. Use: pip install -r requirements.txt
+# For conda users, prefer: conda env update -f environment.yml
+
+python-dotenv>=1.0.0
+requests>=2.31.0
+aiohttp>=3.9.0
+aiofiles>=23.2.0
+pandas>=2.0.0
+numpy>=1.24.0
+plotly>=5.15.0
+flask>=2.3.0
+psutil>=5.9.0
+dash>=2.14.0
+dash-bootstrap-components>=1.5.0
+msal>=1.24.0
+tqdm>=4.66.0
+rich>=13.0.0
+orjson>=3.9.0
+asyncio-throttle>=1.0.2
+cryptography>=41.0.0
