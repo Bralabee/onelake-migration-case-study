@@ -1,0 +1,41 @@
+version: '3.9'
+services:
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: onelake-migrator:latest
+    container_name: onelake-migrator
+    environment:
+      # Inject Fabric / Azure vars at runtime (never bake secrets into image)
+      TENANT_ID: ${TENANT_ID}
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      FABRIC_WORKSPACE_ID: ${FABRIC_WORKSPACE_ID}
+      FABRIC_LAKEHOUSE_ID: ${FABRIC_LAKEHOUSE_ID}
+      MIGRATION_JSON_LOGS: ${MIGRATION_JSON_LOGS:-0}
+      MIGRATION_RUN_ID: ${MIGRATION_RUN_ID:-docker-run}
+    volumes:
+      - ./data:/data
+      - ./logs:/logs
+      - ./config/.env:/app/config/.env:ro
+    command: ["--mode","production"]
+
+  dashboard:
+    image: onelake-migrator:latest
+    container_name: onelake-dashboard
+    depends_on: [migrator]
+    command: ["/usr/local/bin/python","/app/src/monitoring/simple_dashboard.py","--port","8052"]
+    ports:
+      - "8052:8052"
+    environment:
+      PYTHONPATH: /app/src
+    volumes:
+      - ./data:/data:ro
+      - ./logs:/logs:ro
+
+# Usage:
+# 1. Build image: docker compose build
+# 2. Run migrator once: docker compose run --rm migrator --noop
+# 3. Start full stack: docker compose up -d
+# 4. Override mode: docker compose run --rm migrator --mode turbo

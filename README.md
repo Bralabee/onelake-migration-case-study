@@ -401,6 +401,84 @@ Legacy wrapper scripts (e.g., `onelake_migrator_turbo_working.py`, `onelake_migr
 
 ---
 
+## 🐳 Containerized Usage (Docker)
+
+Run the migrator in a fully reproducible container (no local Python / Conda required).
+
+### Build Image
+```powershell
+docker build -t onelake-migrator .
+```
+
+### One-off NOOP Validation
+```powershell
+docker run --rm ^
+    -v ${PWD}/data:/data ^
+    -v ${PWD}/logs:/logs ^
+    --env-file config/.env ^
+    onelake-migrator --noop
+```
+
+### Standard Production Run
+```powershell
+docker run --rm ^
+    -v ${PWD}/data:/data ^
+    -v ${PWD}/logs:/logs ^
+    --env-file config/.env ^
+    -e MIGRATION_JSON_LOGS=1 ^
+    -e MIGRATION_RUN_ID=docker-prod-1 ^
+    onelake-migrator --mode production
+```
+
+### Retry Failed Uploads Only
+```powershell
+docker run --rm ^
+    -v ${PWD}/data:/data ^
+    -v ${PWD}/logs:/logs ^
+    --env-file config/.env ^
+    onelake-migrator --retry-failures --max-retry 500
+```
+
+### Override Concurrency / Batch Size
+```powershell
+docker run --rm ^
+    -v ${PWD}/data:/data ^
+    -v ${PWD}/logs:/logs ^
+    --env-file config/.env ^
+    onelake-migrator --mode turbo --concurrency 70 --batch-size 350
+```
+
+### Using docker-compose (migrator + dashboard)
+```powershell
+docker compose build
+docker compose run --rm migrator --test-run
+docker compose up -d
+# Dashboard: http://localhost:8052
+```
+
+Scale variants:
+```powershell
+docker compose run --rm migrator --mode turbo --concurrency 90 --batch-size 500
+docker compose run --rm migrator --mode working --concurrency 20 --batch-size 80
+```
+
+### Environment & Secrets
+- Provide runtime secrets via `--env-file config/.env` or compose `environment:` entries
+- No credentials baked into the image
+- Progress + caches persisted via bind mounts `./data` and `./logs`
+
+### Health & User
+- Image sets a non-root user `appuser` (UID 1001)
+- Healthcheck validates Python module import (`fabric.migration.production`)
+
+### Clean Up
+```powershell
+docker compose down
+docker image rm onelake-migrator
+```
+
+---
+
 ## 🤝 Support & Contribution
 
 ### Getting Help
