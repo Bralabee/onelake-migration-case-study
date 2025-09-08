@@ -413,8 +413,8 @@ docker build -t onelake-migrator .
 ### One-off NOOP Validation
 ```powershell
 docker run --rm ^
-    -v ${PWD}/data:/data ^
-    -v ${PWD}/logs:/logs ^
+    -v ${PWD}/data:/app/data ^
+    -v ${PWD}/logs:/app/logs ^
     --env-file config/.env ^
     onelake-migrator --noop
 ```
@@ -422,8 +422,8 @@ docker run --rm ^
 ### Standard Production Run
 ```powershell
 docker run --rm ^
-    -v ${PWD}/data:/data ^
-    -v ${PWD}/logs:/logs ^
+    -v ${PWD}/data:/app/data ^
+    -v ${PWD}/logs:/app/logs ^
     --env-file config/.env ^
     -e MIGRATION_JSON_LOGS=1 ^
     -e MIGRATION_RUN_ID=docker-prod-1 ^
@@ -433,8 +433,8 @@ docker run --rm ^
 ### Retry Failed Uploads Only
 ```powershell
 docker run --rm ^
-    -v ${PWD}/data:/data ^
-    -v ${PWD}/logs:/logs ^
+    -v ${PWD}/data:/app/data ^
+    -v ${PWD}/logs:/app/logs ^
     --env-file config/.env ^
     onelake-migrator --retry-failures --max-retry 500
 ```
@@ -442,8 +442,8 @@ docker run --rm ^
 ### Override Concurrency / Batch Size
 ```powershell
 docker run --rm ^
-    -v ${PWD}/data:/data ^
-    -v ${PWD}/logs:/logs ^
+    -v ${PWD}/data:/app/data ^
+    -v ${PWD}/logs:/app/logs ^
     --env-file config/.env ^
     onelake-migrator --mode turbo --concurrency 70 --batch-size 350
 ```
@@ -456,7 +456,13 @@ docker compose up -d
 # Dashboard: http://localhost:8052
 ```
 
-Scale variants:
+MIGRATION_MODE override (environment):
+```powershell
+set MIGRATION_MODE=turbo; docker compose up migrator
+set MIGRATION_MODE=working; docker compose run --rm migrator --retry-failures --max-retry 200
+```
+
+Scale variants (argument overrides):
 ```powershell
 docker compose run --rm migrator --mode turbo --concurrency 90 --batch-size 500
 docker compose run --rm migrator --mode working --concurrency 20 --batch-size 80
