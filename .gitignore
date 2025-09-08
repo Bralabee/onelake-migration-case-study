@@ -198,6 +198,9 @@ site/
 .nvmrc
 
 # Keep important files (add ! prefix to force include)
+ 
+# Local developer overrides (Makefile overrides, never commit secrets here)
+local.mk
 !.env.template
 !.env.example
 !README.md

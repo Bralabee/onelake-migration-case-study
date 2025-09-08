@@ -1,0 +1,21 @@
+# local.mk.example
+# -------------------------------------------------
+# Copy to local.mk (which is gitignored) to override
+# Makefile defaults without editing the main file.
+# Any variable here replaces the ?= defaults.
+#
+# Examples:
+# ENV_NAME = aca_dev_env
+# SOURCE_DIR = D:/alternate_source
+# WORKSPACE_ID = 00000000-0000-0000-0000-000000000000
+# LAKEHOUSE_ID = 11111111-1111-1111-1111-111111111111
+# DASHBOARD_PORT = 9002
+# DASHBOARD_ENHANCED_PORT = 9003
+# AZCOPY_SOURCE = D:/data/bulk_upload
+# PYTHON = python
+#
+# Add custom composite targets if desired:
+# my-fast-noop: 
+# 	@$(MAKE) migrate-noop SOURCE_DIR=D:/fast_test
+#
+# End of file

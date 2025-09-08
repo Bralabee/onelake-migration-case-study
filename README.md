@@ -18,11 +18,14 @@ This project provides a complete production-grade migration system for transferr
 - 🔄 **Resumable Migration** - Automatic progress tracking and continuation
 - 🛡️ **Enterprise Security** - Azure AD authentication with automatic token refresh
 - 📊 **Real-time Monitoring** - Live dashboard with progress tracking
-- 🔧 **Production Ready** - Comprehensive error handling and retry logic
+- 🔧 **Production Ready** - Comprehensive error handling, retry & reconcile logic
+- 📂 **Structured Artifacts** - Auto-migrates `file_cache_optimized.json` and `token_cache.json` into `data/` directory (backward compatible)
+- 🧾 **Structured Logging** - Optional JSON logs (`MIGRATION_JSON_LOGS=1`) + correlation id (`MIGRATION_RUN_ID`) for observability
+ - 🧾 **Structured Logging + Correlation ID** - Optional JSON logs with per-run `cid` for traceability (see Structured Logging section below)
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Unified CLI)
 
 ### Prerequisites
 - Python 3.8+
@@ -75,23 +78,51 @@ LOCAL_DOWNLOAD_PATH=C:/your_download_path
 powershell.exe -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
 ```
 
-### 4. Run Migration
+### 4. Run Migration (single unified command)
 
-Choose your migration approach:
+Legacy multiple scripts are consolidated behind one module `fabric.migration.production`.
 
-#### Option A: Proven Working Version (Recommended)
-```bash
-# Single file test first
-python onelake_migrator_turbo_working.py
-
-# Full migration (add parameters as needed)
-python onelake_migrator_turbo_working.py
+Basic production run:
+```powershell
+python -m fabric.migration.production --mode production
 ```
 
-#### Option B: Production Turbo Version
-```bash
-# High-performance concurrent migration
-python src/fabric/onelake_migrator_turbo_fixed.py --workers 10
+Turbo preset (higher concurrency & batch size):
+```powershell
+python -m fabric.migration.production --mode turbo
+```
+
+Working / conservative preset:
+```powershell
+python -m fabric.migration.production --mode working
+```
+
+Test run (first 5 batches only):
+```powershell
+python -m fabric.migration.production --test-run
+```
+
+Retry only failed uploads:
+```powershell
+python -m fabric.migration.production --retry-failures --max-retry 500
+```
+
+Reconcile progress counters from raw lists:
+```powershell
+python -m fabric.migration.production --reconcile-progress
+```
+
+Override concurrency or batch size directly:
+```powershell
+python -m fabric.migration.production --mode turbo --concurrency 80 --batch-size 400
+```
+
+Makefile shortcuts (after environment creation):
+```powershell
+make migrate-prod
+make migrate-turbo
+make migrate-retry
+make migrate-reconcile
 ```
 
 ### 5. Monitor Progress
@@ -111,23 +142,23 @@ python src/monitoring/simple_dashboard.py
 
 ```
 📂 Commercial_ACA_taskforce/
-├── 🔧 config/
-│   └── .env                           # Configuration settings
-├── 📊 src/
-│   ├── fabric/                        # Migration engines
-│   │   ├── onelake_migrator_turbo_fixed.py   # Production version
-│   │   └── onelake_migrator.py        # Base version
-│   └── monitoring/                    # Monitoring tools
-│       ├── simple_dashboard.py        # Real-time dashboard
-│       └── enhanced_dashboard.py      # Advanced monitoring
-├── 🔑 scripts/
-│   └── powershell/
-│       └── get_access_token.ps1       # Token generation
-├── 📋 onelake_migrator_turbo_working.py    # Validated working version
-└── 📚 OneLake_Migration_Technical_Case_Study.md
+├── config/
+│   └── .env                      # Primary configuration
+├── data/                         # Progress + caches (auto-migrated)
+├── logs/                         # Centralized logs
+├── src/
+│   └── fabric/
+│       ├── migration/
+│       │   └── production.py     # Unified migration CLI (authoritative)
+│       ├── maintenance/          # Scope + consistency utilities
+│       └── diagnostics/          # Diagnostics + monitoring helpers
+├── scripts/powershell/
+│   └── get_access_token.ps1      # Manual token generation (optional)
+├── QUICK_START.md
+└── OneLake_Migration_Technical_Case_Study.md
 ```
 
-### Migration Flow
+### Migration Flow (Unified CLI)
 
 ```mermaid
 graph LR
@@ -154,22 +185,18 @@ graph LR
 
 ### Migration Scenarios
 
-#### Scenario 1: Fresh Migration (No existing files)
-```bash
-# Full migration with monitoring
-python onelake_migrator_turbo_working.py
+#### Scenario 1: Fresh Migration
+```powershell
+python -m fabric.migration.production --mode production
 ```
 
-#### Scenario 2: Files Already Exist (Current State)
-The system will encounter existing files and fail uploads. Options:
-1. **Skip existing files** (modify script to check existence first)
-2. **Force overwrite** (add overwrite flag to API calls)
-3. **Incremental migration** (only new/changed files)
+#### Scenario 2: Existing Files (Most common now)
+Expect conflict messages (already uploaded). Use retry only if genuine transient failures.
 
-#### Scenario 3: Resume Interrupted Migration
-```bash
-# The system automatically detects and resumes from progress files
-python src/fabric/onelake_migrator_turbo_fixed.py --resume
+#### Scenario 3: Dry Run / Smoke Check
+Use noop mode to verify cache + environment without uploads:
+```powershell
+python -m fabric.migration.production --noop
 ```
 
 ### Monitoring and Debugging
@@ -180,15 +207,69 @@ python src/monitoring/simple_dashboard.py
 # Access: http://localhost:8051
 ```
 
-#### Progress Files
-- `migration_progress_working.json` - Working version progress
-- `download_progress_turbo_backup_*.json` - Backup progress files
+#### Progress & Cache Artifacts
+- `data/migration_progress_*.json` - Progress tracking (primary)
+- `data/file_cache_optimized.json` - File manifest
+- `data/token_cache.json` - MSAL token persistence
 
 #### Log Analysis
 ```bash
 # Monitor live logs
-Get-Content "onelake_migration_working.log" -Wait -Tail 50
+Get-Content "logs/onelake_migration_production.log" -Wait -Tail 50
 ```
+
+### Structured Logging & Correlation ID (Unified)
+Enable JSON line logs (fields: ts, level, msg, name, cid) and optionally set a custom run id for traceability across distributed systems or CI pipelines:
+
+```powershell
+$env:MIGRATION_JSON_LOGS=1
+$env:MIGRATION_RUN_ID="ci-build-1234"
+python -m fabric.migration.production --mode production
+```
+
+Plain logs include the correlation id prefix: `[CID=<value>]`. Detailed guidance: see `FABRIC_MIGRATION_GUIDE.md` (Structured Logging section). Example quick filter:
+```powershell
+Select-String -Path logs/onelake_migration_production.log -Pattern "CID=ci-build-1234"
+```
+
+### Makefile Variable Overrides & Local Customization
+
+The `Makefile` now exposes all key parameters via `?=` assignments. You can override any of them on the fly or persistently via a personal `local.mk` file (ignored by git).
+
+Inspect current effective configuration:
+```powershell
+make vars
+```
+
+Temporary (one-off) overrides:
+```powershell
+make SOURCE_DIR=D:/alt/data migrate-noop
+make ENV_NAME=aca_dev_env migrate-prod
+make DASHBOARD_PORT=9001 dashboard
+make WORKSPACE_ID=00000000-0000-0000-0000-000000000000 LAKEHOUSE_ID=11111111-1111-1111-111111111111 fabric-migrate-azcopy
+```
+
+Persistent overrides:
+```powershell
+copy local.mk.example local.mk
+# edit local.mk then
+make migrate-prod
+```
+
+Key override variables (subset):
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `ENV_NAME` | Conda environment | `aca_taskforce_env` |
+| `SRC_DIR` | Source added to PYTHONPATH | `src` |
+| `SOURCE_DIR` | Local SharePoint dump | `C:/commercial_pdfs/downloaded_files` |
+| `WORKSPACE_ID` | Fabric Workspace GUID | `YOUR_WORKSPACE_ID` |
+| `LAKEHOUSE_ID` | Fabric Lakehouse GUID | `YOUR_LAKEHOUSE_ID` |
+| `DASHBOARD_PORT` | Simple dashboard port | `8052` |
+| `DASHBOARD_ENHANCED_PORT` | Enhanced dashboard port | `8053` |
+| `AZCOPY_SOURCE` | AzCopy source path | `$(SOURCE_DIR)` |
+
+Safety check: AzCopy targets abort if `WORKSPACE_ID` or `LAKEHOUSE_ID` remain placeholders.
+
 
 ---
 
@@ -249,21 +330,24 @@ pip install aiofiles aiohttp asyncio
 **Symptoms:** Connection failures, wrong endpoints  
 **Solution:** Verify GUIDs in `.env` file match your Fabric workspace
 
-### Debug Commands
+### Debug & Operations Commands
 
-```bash
-# Test single file upload
-python onelake_migrator_turbo_working.py --test-mode
+```powershell
+# Test run (non-destructive)
+python -m fabric.migration.production --test-run
 
-# Verify environment
-python test_env.py
+# Retry failures
+python -m fabric.migration.production --retry-failures --max-retry 200
 
-# Check API connectivity
-python test_onelake_api.py
+# Reconcile progress
+python -m fabric.migration.production --reconcile-progress
 
-# Monitor system resources
+# Monitor
 python src/monitoring/simple_dashboard.py
 ```
+
+### Legacy Script Notice
+Legacy wrapper scripts (e.g., `onelake_migrator_turbo_working.py`, `onelake_migrator_production.py`) remain temporarily as thin delegates to the unified module and will be retired in a future cleanup pass.
 
 ---
 

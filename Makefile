@@ -1,10 +1,85 @@
-ENV_NAME=aca_taskforce_env
-ENV_FILE=environment.yml
-SCRIPT_FILE=src/sharepoint/dll_pdf_fabric.py
-ENV_TEMPLATE=.env.template
-ENV_CONFIG=.env
+############################################################
+# Core Configuration (override via environment or CLI)      #
+############################################################
 
-.PHONY: help env-create env-update env-clean env-setup env-activate download run status test clean all dashboard analyze-logs setup-dashboard reorganize
+# Conda environment name (override: `make ENV_NAME=myenv migrate-prod`)
+ENV_NAME ?= aca_taskforce_env
+
+# Environment specification file
+ENV_FILE ?= environment.yml
+
+# Source directory for Python modules (inserted into PYTHONPATH)
+SRC_DIR ?= src
+
+# Primary SharePoint download script (legacy workflow)
+SHAREPOINT_SCRIPT ?= $(SRC_DIR)/sharepoint/dll_pdf_fabric.py
+
+# Turbo downloader script (legacy)
+SHAREPOINT_TURBO_SCRIPT ?= $(SRC_DIR)/sharepoint/dll_pdf_fabric_turbo.py
+
+# Monitoring scripts
+SIMPLE_DASHBOARD ?= $(SRC_DIR)/monitoring/simple_dashboard.py
+ENHANCED_DASHBOARD ?= $(SRC_DIR)/monitoring/enhanced_dashboard.py
+CUSTOM_DASHBOARD ?= $(SRC_DIR)/monitoring/dashboard_monitor.py
+LOG_ANALYZER ?= $(SRC_DIR)/monitoring/log_analyzer.py
+
+# Fabric / OneLake scripts (legacy helpers)
+FABRIC_SETUP_SCRIPT ?= $(SRC_DIR)/fabric/fabric_setup_onelake.py
+FABRIC_ANALYZE_STRUCTURE ?= $(SRC_DIR)/fabric/analyze_directory_structure.py
+FABRIC_CREATE_DIRS_API ?= $(SRC_DIR)/fabric/create_onelake_directories.py
+FABRIC_TURBO_LEGACY ?= onelake_migrator_production.py
+FABRIC_TURBO_FIXED ?= $(SRC_DIR)/fabric/onelake_migrator_turbo_fixed.py
+FABRIC_MIGRATOR_LEGACY ?= $(SRC_DIR)/fabric/onelake_migrator.py
+
+# Unified migrator Python module & default execution flags
+MIGRATOR_MODULE ?= fabric.migration.production
+PYTHON ?= python
+
+# Default data / source paths (may be overridden)
+SOURCE_DIR ?= C:/commercial_pdfs/downloaded_files
+DOWNLOAD_PROGRESS_FILE ?= $(SOURCE_DIR)/download_progress_turbo.json
+
+# Fabric IDs (override via: make WORKSPACE_ID=... LAKEHOUSE_ID=... fabric-migrate-azcopy)
+WORKSPACE_ID ?= YOUR_WORKSPACE_ID
+LAKEHOUSE_ID ?= YOUR_LAKEHOUSE_ID
+
+# AzCopy script & arguments (override AZCOPY_SOURCE if different from SOURCE_DIR)
+AZCOPY_SCRIPT ?= scripts/powershell/azcopy_migration.ps1
+AZCOPY_SOURCE ?= $(SOURCE_DIR)
+AZCOPY_ARGS = -SourcePath "$(AZCOPY_SOURCE)" -WorkspaceId "$(WORKSPACE_ID)" -LakehouseId "$(LAKEHOUSE_ID)"
+
+# Reorganization & helper PowerShell scripts
+REORGANIZE_SCRIPT ?= scripts/powershell/reorganize_codebase.ps1
+GET_TOKEN_SCRIPT ?= scripts/powershell/get_access_token.ps1
+FILE_EXPLORER_SETUP ?= scripts/powershell/onelake_file_explorer_setup.ps1
+
+# .env handling
+ENV_TEMPLATE ?= .env.template
+ENV_CONFIG ?= .env
+
+# Dashboard ports (override: make DASHBOARD_PORT=9000 dashboard)
+DASHBOARD_PORT ?= 8052
+DASHBOARD_ENHANCED_PORT ?= 8053
+
+# Internal macro: base invocation for unified migrator (PowerShell required for PYTHONPATH prepend on Windows)
+MIGRATE_SHELL = conda run -n $(ENV_NAME) powershell -Command
+MIGRATE_ENV_BOOTSTRAP = "$$env:PYTHONPATH='$(SRC_DIR);' + ($$env:PYTHONPATH); $(PYTHON) -m $(MIGRATOR_MODULE)"
+
+# Internal macro: simple conda python call (no PowerShell)
+CONDA_PY = conda run -n $(ENV_NAME) $(PYTHON)
+
+# Columnized echo helper (ANSI may not render in all shells; kept simple)
+define PRINT_VAR_BLOCK
+	@echo "Configuration → ENV_NAME=$(ENV_NAME) SRC_DIR=$(SRC_DIR) SOURCE_DIR=$(SOURCE_DIR) WORKSPACE_ID=$(WORKSPACE_ID) LAKEHOUSE_ID=$(LAKEHOUSE_ID)"
+endef
+
+# Optional per-developer overrides (not committed). Provide local.mk to redefine any ?= vars.
+-include local.mk
+
+.PHONY: help env-create env-update env-clean env-setup env-activate download run status test clean all dashboard analyze-logs setup-dashboard reorganize vars
+
+# Unified migration targets (new)
+.PHONY: migrate-prod migrate-turbo migrate-working migrate-retry migrate-reconcile
 
 # Default target
 all: help
@@ -12,11 +87,15 @@ all: help
 # Codebase organization
 reorganize:
 	@echo "🏗️ Reorganizing codebase structure..."
-	powershell -ExecutionPolicy Bypass -File "reorganize_codebase.ps1"
+	powershell -ExecutionPolicy Bypass -File "$(REORGANIZE_SCRIPT)"
 
 reorganize-dryrun:
 	@echo "🧪 Testing codebase reorganization (dry run)..."
-	powershell -ExecutionPolicy Bypass -File "reorganize_codebase.ps1" -DryRun
+	powershell -ExecutionPolicy Bypass -File "$(REORGANIZE_SCRIPT)" -DryRun
+
+# Show evaluated core variables
+vars:
+	$(PRINT_VAR_BLOCK)
 
 # Show help
 help:
@@ -47,15 +126,68 @@ help:
 	@echo "  make dashboard     Launch real-time monitoring dashboard"
 	@echo "  make analyze-logs  Analyze download logs"
 	@echo ""
-	@echo "Microsoft Fabric:"
-	@echo "  make fabric-help   Show all Fabric migration options"
+	@echo "Microsoft Fabric (Unified Migrator):"
+	@echo "  make migrate-prod        Production mode (balanced)"
+	@echo "  make migrate-turbo       Turbo mode (high throughput)"
+	@echo "  make migrate-working     Working/safe mode"
+	@echo "  make migrate-retry       Retry failed uploads"
+	@echo "  make migrate-reconcile   Recalculate progress counters"
+	@echo "  make fabric-help         Legacy help (deprecated wrappers)"
 	@echo ""
 	@echo "Quick Start:"
 	@echo "  1. make reorganize     # Organize codebase (FIRST TIME ONLY)"
 	@echo "  2. make env-create     # Create environment"
 	@echo "  3. make env-setup      # Copy .env template" 
 	@echo "  4. Edit .env file with your credentials"
-	@echo "  5. make download       # Run the script"
+	@echo "  5. make migrate-prod   # Start migration (new unified CLI)"
+	@echo ""
+	@echo "Unified Migration CLI Examples:"
+	@echo "  $(PYTHON) -m $(MIGRATOR_MODULE) --mode production"
+	@echo "  $(PYTHON) -m $(MIGRATOR_MODULE) --mode turbo --concurrency 60 --batch-size 300"
+	@echo "  $(PYTHON) -m $(MIGRATOR_MODULE) --retry-failures --max-retry 100"
+	@echo "  $(PYTHON) -m $(MIGRATOR_MODULE) --reconcile-progress"
+	@echo ""
+	@echo "Variable Overrides (examples):"
+	@echo "  make ENV_NAME=alt_env migrate-prod"
+	@echo "  make SOURCE_DIR=D:/data/downloaded migrate-noop"
+	@echo "  make WORKSPACE_ID=xxxx LAKEHOUSE_ID=yyyy fabric-migrate-azcopy"
+	@echo "  make DASHBOARD_PORT=9001 dashboard"
+
+# Unified migrator targets -------------------------------------------------
+
+migrate-prod:
+	@echo "🚀 OneLake Migration (production mode)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --mode production
+
+migrate-turbo:
+	@echo "⚡ OneLake Migration (turbo mode)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --mode turbo
+
+migrate-working:
+	@echo "🧪 OneLake Migration (working/safe mode)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --mode working
+
+migrate-retry:
+	@echo "🔁 Retrying failed uploads (all failures)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --retry-failures
+
+migrate-retry-%:
+	@echo "🔁 Retrying first $* failed uploads"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --retry-failures --max-retry $*
+
+migrate-reconcile:
+	@echo "♻️  Reconciling progress counters"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --reconcile-progress
+
+.PHONY: migrate-noop
+migrate-noop:
+	@echo "🔎 OneLake Migration NOOP (list first 5 files)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --noop
+
+.PHONY: migrate-test-run
+migrate-test-run:
+	@echo "🧪 OneLake Migration TEST-RUN (first 5 batches)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --test-run
 
 # Environment management
 env-create:
@@ -113,7 +245,7 @@ status:
 	)
 	@echo ""
 	@echo "Script Status:"
-	@if exist $(SCRIPT_FILE) ( \
+	@if exist $(SHAREPOINT_SCRIPT) ( \
 		echo "✅ Download script exists" \
 	) else ( \
 		echo "❌ Download script missing - run 'make reorganize' first" \
@@ -123,7 +255,7 @@ status:
 test:
 	@echo "🧪 Testing configuration and imports..."
 	@conda run -n $(ENV_NAME) python -c "print('🔍 Testing imports...'); import os, requests, datetime, time, logging, pathlib; print('✅ All imports successful!')"
-	@conda run -n $(ENV_NAME) python -c "import sys; sys.path.append('src'); from sharepoint.dll_pdf_fabric import load_env_file, validate_parameters, default_params; load_env_file(); print('✅ Configuration loaded successfully!')"
+	@$(CONDA_PY) -c "import sys; sys.path.append('$(SRC_DIR)'); from sharepoint.dll_pdf_fabric import load_env_file, validate_parameters, default_params; load_env_file(); print('✅ Configuration loaded successfully!')"
 	@echo "✅ All tests passed!"
 
 # Main execution
@@ -135,17 +267,17 @@ download:
 	@echo "   3. ✅ Proper Azure AD permissions"
 	@echo ""
 	@echo "🔄 Running download script..."
-	conda run -n $(ENV_NAME) python $(SCRIPT_FILE)
+	$(CONDA_PY) $(SHAREPOINT_SCRIPT)
 
 # Cache management commands
 clear-cache:
 	@echo "🗑️  Clearing file list and progress cache..."
-	conda run -n $(ENV_NAME) python $(SCRIPT_FILE) --clear-cache
+	$(CONDA_PY) $(SHAREPOINT_SCRIPT) --clear-cache
 	@echo "✅ Cache cleared successfully!"
 
 refresh:
 	@echo "🔄 Force refreshing file list to detect new files..."
-	conda run -n $(ENV_NAME) python $(SCRIPT_FILE) --refresh
+	$(CONDA_PY) $(SHAREPOINT_SCRIPT) --refresh
 
 cache-status:
 	@echo "📊 Cache Status"
@@ -187,23 +319,23 @@ clean:
 # Turbo version commands for speed optimization
 run-turbo-conservative:
 	@echo "🚀 Running SharePoint downloader with CONSERVATIVE parallel processing (5 workers)..."
-	conda run -n $(ENV_NAME) python src/sharepoint/dll_pdf_fabric_turbo.py --conservative
+	$(CONDA_PY) $(SHAREPOINT_TURBO_SCRIPT) --conservative
 
 run-turbo-normal:
 	@echo "🚀 Running SharePoint downloader with NORMAL parallel processing (10 workers)..."
-	conda run -n $(ENV_NAME) python src/sharepoint/dll_pdf_fabric_turbo.py --normal
+	$(CONDA_PY) $(SHAREPOINT_TURBO_SCRIPT) --normal
 
 run-turbo-fast:
 	@echo "🚀 Running SharePoint downloader with FAST parallel processing (15 workers)..."
-	conda run -n $(ENV_NAME) python src/sharepoint/dll_pdf_fabric_turbo.py --fast
+	$(CONDA_PY) $(SHAREPOINT_TURBO_SCRIPT) --fast
 
 run-turbo:
 	@echo "🚀 Running SharePoint downloader with TURBO parallel processing (25 workers)..."
-	conda run -n $(ENV_NAME) python src/sharepoint/dll_pdf_fabric_turbo.py --turbo
+	$(CONDA_PY) $(SHAREPOINT_TURBO_SCRIPT) --turbo
 
 test-turbo:
 	@echo "🧪 Testing turbo version..."
-	conda run -n $(ENV_NAME) python src/sharepoint/dll_pdf_fabric_turbo.py --help
+	$(CONDA_PY) $(SHAREPOINT_TURBO_SCRIPT) --help
 
 # Quick comparison between versions
 compare-speeds:
@@ -225,39 +357,39 @@ setup-dashboard:
 
 dashboard:
 	@echo "🚀 Launching SharePoint Download Dashboard..."
-	@echo "📊 Dashboard will be available at: http://localhost:8052"
+	@echo "📊 Dashboard will be available at: http://localhost:$(DASHBOARD_PORT)"
 	@echo "🔄 Real-time monitoring with 5-second refresh intervals"
 	@echo "💡 Keep this terminal open while monitoring"
 	@echo ""
-	conda run -n $(ENV_NAME) python src/monitoring/simple_dashboard.py
+	$(CONDA_PY) $(SIMPLE_DASHBOARD) --port $(DASHBOARD_PORT)
 
 dashboard-enhanced:
 	@echo "🚀 Launching Enhanced SharePoint Download Dashboard..."
-	@echo "📊 Enhanced dashboard with detailed analytics at: http://localhost:8053"
+	@echo "📊 Enhanced dashboard with detailed analytics at: http://localhost:$(DASHBOARD_ENHANCED_PORT)"
 	@echo "🔄 Real-time monitoring with comprehensive statistics"
 	@echo "💡 Features: File type analysis, performance metrics, error tracking"
 	@echo ""
-	conda run -n $(ENV_NAME) python src/monitoring/enhanced_dashboard.py
+	$(CONDA_PY) $(ENHANCED_DASHBOARD) --port $(DASHBOARD_ENHANCED_PORT)
 
 dashboard-custom:
 	@echo "📊 Launching dashboard with custom settings..."
-	@echo "Usage: make dashboard-custom PORT=8051 PATH=/custom/path"
-	conda run -n $(ENV_NAME) python src/monitoring/dashboard_monitor.py --port $(or $(PORT),8050) --path $(or $(PATH),C:/commercial_pdfs/downloaded_files)
+	@echo "Usage: make dashboard-custom PORT=9000 PATH=D:/alt/path"
+	$(CONDA_PY) $(CUSTOM_DASHBOARD) --port $(or $(PORT),$(DASHBOARD_PORT)) --path $(or $(PATH),$(SOURCE_DIR))
 
 analyze-logs:
 	@echo "🔍 Analyzing download logs..."
-	conda run -n $(ENV_NAME) python src/monitoring/log_analyzer.py --logs "*.log" "../logs/*.log" --export analysis_results.json
+	$(CONDA_PY) $(LOG_ANALYZER) --logs "*.log" "../logs/*.log" --export analysis_results.json
 	@echo "📊 Log analysis complete! Results saved to analysis_results.json"
 
 analyze-logs-chart:
 	@echo "📈 Analyzing logs with performance charts..."
-	conda run -n $(ENV_NAME) python src/monitoring/log_analyzer.py --logs "*.log" "../logs/*.log" --chart --export analysis_results.json
+	$(CONDA_PY) $(LOG_ANALYZER) --logs "*.log" "../logs/*.log" --chart --export analysis_results.json
 
 # Monitoring helpers
 monitor-progress:
 	@echo "📊 Current Progress Status:"
 	@echo "=========================="
-	@if exist "C:\commercial_pdfs\downloaded_files\download_progress_turbo.json" (powershell -Command "$$progress = Get-Content 'C:\commercial_pdfs\downloaded_files\download_progress_turbo.json' | ConvertFrom-Json; Write-Host 'Last processed index:' $$progress.last_processed_index; Write-Host 'Successful downloads:' $$progress.results.success.Count; Write-Host 'Failed downloads:' $$progress.results.failed.Count; Write-Host 'Last update:' $$progress.timestamp") else (echo "No progress file found - download may not be running or not started yet")
+	@if exist "$(DOWNLOAD_PROGRESS_FILE)" (powershell -Command "$$progress = Get-Content '$(DOWNLOAD_PROGRESS_FILE)' | ConvertFrom-Json; Write-Host 'Last processed index:' $$progress.last_processed_index; Write-Host 'Successful downloads:' $$progress.results.success.Count; Write-Host 'Failed downloads:' $$progress.results.failed.Count; Write-Host 'Last update:' $$progress.timestamp") else (echo "No progress file found - progress file not present yet")
 
 monitor-cache:
 	@echo "📁 Cache File Status:"
@@ -278,73 +410,70 @@ monitor-all:
 fabric-setup:
 	@echo "🔧 Setting up OneLake directory structure..."
 	@echo "💡 This creates the required directories in your lakehouse"
-	conda run -n $(ENV_NAME) python src/fabric/fabric_setup_onelake.py
+	$(CONDA_PY) $(FABRIC_SETUP_SCRIPT)
 
 fabric-analyze:
 	@echo "🔍 Analyzing files for Fabric OneLake migration..."
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator.py --analyze-only --source "C:/commercial_pdfs/downloaded_files"
+	$(CONDA_PY) $(FABRIC_MIGRATOR_LEGACY) --analyze-only --source "$(SOURCE_DIR)"
 
 fabric-migrate:
-	@echo "🚀 Starting Fabric OneLake migration..."
-	@echo "⚠️  This will upload files to Microsoft Fabric OneLake"
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator.py --source "C:/commercial_pdfs/downloaded_files" --batch-size 50
+	@echo "⚠️  DEPRECATED: use 'make migrate-prod' (legacy script call)"
+	$(CONDA_PY) $(FABRIC_TURBO_LEGACY)
 
 fabric-migrate-turbo:
-	@echo "🚀 Starting OPTIMIZED Fabric OneLake migration with parallel processing..."
-	@echo "⚡ Expected performance: 15-25 files/sec (vs 2-5 files/sec standard)"
-	@echo "⏱️  Estimated time for 376,882 files: 4-7 hours (vs 21-52 hours standard)"
-	@echo "⚠️  This will upload files to Microsoft Fabric OneLake"
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator_turbo_fixed.py --source "C:/commercial_pdfs/downloaded_files" --workers 25
+	@echo "⚠️  DEPRECATED: use 'make migrate-turbo' (legacy turbo wrapper)"
+	$(CONDA_PY) $(FABRIC_TURBO_LEGACY) --mode turbo
 
 fabric-migrate-turbo-conservative:
-	@echo "🚀 Starting CONSERVATIVE optimized Fabric OneLake migration..."
-	@echo "⚡ Expected performance: 10-15 files/sec"
-	@echo "⏱️  Estimated time for 376,882 files: 7-10 hours"
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator_turbo_fixed.py --source "C:/commercial_pdfs/downloaded_files" --workers 10
+	@echo "⚠️  DEPRECATED: use 'make migrate-working' (legacy working mode)"
+	$(CONDA_PY) $(FABRIC_TURBO_LEGACY) --mode working
 
 fabric-migrate-resume:
-	@echo "🔄 Resuming Fabric OneLake migration..."
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator.py --resume --source "C:/commercial_pdfs/downloaded_files" --batch-size 50
+	@echo "🔄 Resuming Fabric OneLake migration (legacy script)..."
+	$(CONDA_PY) $(FABRIC_MIGRATOR_LEGACY) --resume --source "$(SOURCE_DIR)" --batch-size 50
 
 fabric-migrate-turbo-resume:
 	@echo "🔄 Resuming OPTIMIZED Fabric OneLake migration..."
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator_turbo_fixed.py --source "C:/commercial_pdfs/downloaded_files" --workers 25 --resume
+	$(CONDA_PY) $(FABRIC_TURBO_FIXED) --source "$(SOURCE_DIR)" --workers 25 --resume
 
 fabric-test:
-	@echo "🧪 Testing Fabric OneLake connection with small batch..."
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator.py --source "C:/commercial_pdfs/downloaded_files" --batch-size 5
+	@echo "🧪 Testing unified migrator with 5 batches (test-run)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --test-run
 
 fabric-test-single:
-	@echo "🧪 Testing Fabric OneLake with single file upload..."
-	conda run -n $(ENV_NAME) python src/fabric/onelake_migrator.py --source "C:/commercial_pdfs/downloaded_files" --batch-size 1
+	@echo "🧪 Testing unified migrator single-batch (batch size override)"
+	$(MIGRATE_SHELL) $(MIGRATE_ENV_BOOTSTRAP) --batch-size 1 --max-batches 1
 
 fabric-create-directories:
 	@echo "🏗️ Analyzing directory structure for OneLake..."
 	@echo "💡 This analyzes your files and provides manual creation guide"
-	conda run -n $(ENV_NAME) python src/fabric/analyze_directory_structure.py
+	$(CONDA_PY) $(FABRIC_ANALYZE_STRUCTURE)
 
 fabric-get-token:
 	@echo "🔑 Getting Azure access token for Fabric API..."
-	powershell -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
+	powershell -ExecutionPolicy Bypass -File "$(GET_TOKEN_SCRIPT)"
 
 fabric-create-directories-api:
 	@echo "🏗️ Creating OneLake directories via API..."
 	@echo "💡 Requires ACCESS_TOKEN in .env file (run 'make fabric-get-token' first)"
-	conda run -n $(ENV_NAME) python src/fabric/create_onelake_directories.py
+	$(CONDA_PY) $(FABRIC_CREATE_DIRS_API)
 
 fabric-migrate-azcopy:
 	@echo "🚀 Starting AzCopy migration to OneLake..."
 	@echo "⚡ High-performance migration using Microsoft AzCopy"
-	@echo "💡 Make sure AzCopy is installed and you're authenticated"
-	powershell -ExecutionPolicy Bypass -File "scripts/powershell/azcopy_migration.ps1" -SourcePath "C:\commercial_pdfs\downloaded_files" -WorkspaceId "abc64232-25a2-499d-90ae-9fe5939ae437" -LakehouseId "a622b04f-1094-4f9b-86fd-5105f4778f76"
+	@echo "💡 Override WORKSPACE_ID / LAKEHOUSE_ID / AZCOPY_SOURCE as needed"
+	@echo "   Example: make WORKSPACE_ID=xxxx LAKEHOUSE_ID=yyyy AZCOPY_SOURCE=D:/data fabric-migrate-azcopy"
+	powershell -NoLogo -NoProfile -Command "if ('$(WORKSPACE_ID)' -eq 'YOUR_WORKSPACE_ID' -or '$(LAKEHOUSE_ID)' -eq 'YOUR_LAKEHOUSE_ID') { Write-Host '❌ WORKSPACE_ID / LAKEHOUSE_ID not set (pass via make variables)'; exit 1 }"
+	powershell -ExecutionPolicy Bypass -File "$(AZCOPY_SCRIPT)" $(AZCOPY_ARGS)
 
 fabric-migrate-azcopy-dryrun:
 	@echo "🧪 AzCopy dry run - no files will be transferred..."
-	powershell -ExecutionPolicy Bypass -File "scripts/powershell/azcopy_migration.ps1" -SourcePath "C:\commercial_pdfs\downloaded_files" -WorkspaceId "abc64232-25a2-499d-90ae-9fe5939ae437" -LakehouseId "a622b04f-1094-4f9b-86fd-5105f4778f76" -DryRun
+	powershell -NoLogo -NoProfile -Command "if ('$(WORKSPACE_ID)' -eq 'YOUR_WORKSPACE_ID' -or '$(LAKEHOUSE_ID)' -eq 'YOUR_LAKEHOUSE_ID') { Write-Host '❌ WORKSPACE_ID / LAKEHOUSE_ID not set (pass via make variables)'; exit 1 }"
+	powershell -ExecutionPolicy Bypass -File "$(AZCOPY_SCRIPT)" $(AZCOPY_ARGS) -DryRun
 
 fabric-setup-fileexplorer:
 	@echo "🗂️ Setting up OneLake File Explorer..."
-	powershell -ExecutionPolicy Bypass -File "scripts/powershell/onelake_file_explorer_setup.ps1"
+	powershell -ExecutionPolicy Bypass -File "$(FILE_EXPLORER_SETUP)"
 
 fabric-help:
 	@echo "🏗️ Microsoft Fabric OneLake Migration Commands"
