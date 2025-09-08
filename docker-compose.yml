@@ -6,36 +6,42 @@ services:
       dockerfile: Dockerfile
     image: onelake-migrator:latest
     container_name: onelake-migrator
+    env_file:
+      - config/.env
     environment:
-      # Inject Fabric / Azure vars at runtime (never bake secrets into image)
-      TENANT_ID: ${TENANT_ID}
-      CLIENT_ID: ${CLIENT_ID}
-      CLIENT_SECRET: ${CLIENT_SECRET}
-      FABRIC_WORKSPACE_ID: ${FABRIC_WORKSPACE_ID}
-      FABRIC_LAKEHOUSE_ID: ${FABRIC_LAKEHOUSE_ID}
-      MIGRATION_JSON_LOGS: ${MIGRATION_JSON_LOGS:-0}
-      MIGRATION_RUN_ID: ${MIGRATION_RUN_ID:-docker-run}
+      # Runtime overrides / defaults (safe to change)
+      MIGRATION_JSON_LOGS: ${MIGRATION_JSON_LOGS:-1}
+      MIGRATION_RUN_ID: ${MIGRATION_RUN_ID:-compose-prod}
+      MIGRATION_LOG_DIR: /app/logs
+      # Optional: override mode via MIGRATION_MODE or pass args
+      MIGRATION_MODE: ${MIGRATION_MODE:-production}
     volumes:
-      - ./data:/data
-      - ./logs:/logs
-      - ./config/.env:/app/config/.env:ro
-    command: ["--mode","production"]
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: ["--mode","${MIGRATION_MODE:-production}"]
 
   dashboard:
     image: onelake-migrator:latest
     container_name: onelake-dashboard
-    depends_on: [migrator]
+    depends_on:
+      - migrator
+    env_file:
+      - config/.env
+    environment:
+      PYTHONPATH: /app/src
+      MIGRATION_LOG_DIR: /app/logs
     command: ["/usr/local/bin/python","/app/src/monitoring/simple_dashboard.py","--port","8052"]
     ports:
       - "8052:8052"
-    environment:
-      PYTHONPATH: /app/src
     volumes:
-      - ./data:/data:ro
-      - ./logs:/logs:ro
+      - ./data:/app/data:ro
+      - ./logs:/app/logs:ro
 
-# Usage:
-# 1. Build image: docker compose build
-# 2. Run migrator once: docker compose run --rm migrator --noop
-# 3. Start full stack: docker compose up -d
-# 4. Override mode: docker compose run --rm migrator --mode turbo
+# Quick Usage:
+# Build image:        docker compose build
+# NOOP test:          docker compose run --rm migrator --noop
+# Turbo run:          docker compose run --rm migrator --mode turbo --concurrency 80 --batch-size 400
+# Start stack:        docker compose up -d
+# Tail logs:          docker compose logs -f migrator
+# Override mode env:  set MIGRATION_MODE=working; docker compose up migrator
+# One-off retry:      docker compose run --rm migrator --retry-failures --max-retry 300
