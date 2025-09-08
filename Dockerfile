@@ -10,10 +10,11 @@ LABEL org.opencontainers.image.title="onelake-migrator" \
 
 # Set UTF-8 & no bytecode
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/src
+  PYTHONUNBUFFERED=1 \
+  PIP_NO_CACHE_DIR=1 \
+  PIP_DISABLE_PIP_VERSION_CHECK=1 \
+  PYTHONPATH=/app/src \
+  MIGRATION_LOG_DIR=/app/logs
 
 WORKDIR /app
 
@@ -34,7 +35,9 @@ COPY config ./config
 COPY scripts ./scripts
 
 # Non-root runtime
-RUN useradd -u 1001 -m appuser
+RUN useradd -u 1001 -m appuser \
+ && mkdir -p /app/logs /app/data \
+ && chown -R appuser:appuser /app/logs /app/data
 USER appuser
 
 # Default mount points (runtime):
