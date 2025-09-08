@@ -1,226 +1,188 @@
 # 🚀 OneLake Migration - Quick Start Guide
 
-**Get up and running in 5 minutes**
+**Get up and running in 5 minutes (Unified CLI)**
 
-This guide gets you from zero to running migration in the shortest time possible.
+This guide gets you from zero to running the unified migration engine in the shortest time possible.
 
 ---
 
 ## ⚡ 30-Second Setup
 
-```bash
+```powershell
 # 1. Navigate to project
 cd Commercial_ACA_taskforce
 
-# 2. Activate environment  
+# 2. (First time only) create env & .env template
+make env-create
+make env-setup
+
+# 3. Activate environment
 conda activate aca_taskforce_env
 
-# 3. Generate token
-powershell.exe -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
+# 4. Generate / refresh token
+powershell.exe -ExecutionPolicy Bypass -File scripts/powershell/get_access_token.ps1
 
-# 4. Run migration
-python onelake_migrator_turbo_working.py
+# 5. Pre-flight (NOOP – lists first 5 files, no uploads)
+python -m fabric.migration.production --noop
+
+# 6. Start migration (production preset)
+python -m fabric.migration.production --mode production
+
+# (Or use Make targets)
+make migrate-prod
 ```
 
----
 
 ## 🎯 Current Project State
 
 ### ✅ What Works Right Now
-- **Environment:** `aca_taskforce_env` conda environment is configured
-- **Authentication:** PowerShell token generation script
-- **Migration Engine:** `onelake_migrator_turbo_working.py` is validated
-- **Monitoring:** Dashboard available at `http://localhost:8051`
-- **Configuration:** Valid workspace and lakehouse IDs in `config/.env`
+- Environment: `aca_taskforce_env`
+- Auth: PowerShell token script + internal MSAL caching
+- Unified Engine: `fabric.migration.production`
+- Monitoring: Dashboard at http://localhost:8052 (override: `make DASHBOARD_PORT=9001 dashboard`)
+- Config: `config/.env` (create via `make env-setup`)
+- Makefile variable inspection: `make vars`
 
-### ⚠️ Important Current Situation
-**Files Already Exist in OneLake!** 
-- Previous migration was 100% successful (376,888 files)
-- Re-running migration will show 0% success (conflict errors)
-- This is expected behavior - not a failure
+### ⚠️ Current Situation
+Data set already fully migrated (376,888 files). Re-running against same destination will mostly encounter existing files (conflict messages) which are logged as skips.
 
----
 
 ## 🔧 Choose Your Mission
 
 ### Mission 1: Test Connectivity (Recommended First)
-```bash
-# Quick API test
-python onelake_migrator_turbo_working.py
-# Look for: "SUCCESS: Uploaded: test_upload/test_api_working.py"
+```powershell
+python -m fabric.migration.production --test-run
 ```
 
-### Mission 2: Monitor Existing Files
-```bash
-# Start monitoring dashboard
-python src/monitoring/simple_dashboard.py
-# View at: http://localhost:8051
+### Mission 2: Safe NOOP (Readiness Check)
+```powershell
+python -m fabric.migration.production --noop
+# or
+make migrate-noop
 ```
 
-### Mission 3: Production Migration (if needed)
-```bash
-# High-performance migration with 10 workers
-python src/fabric/onelake_migrator_turbo_fixed.py --workers 10
+### Mission 3: Monitor Existing Files
+```powershell
+python src/monitoring/simple_dashboard.py --port 8052
+# View at: http://localhost:8052
 ```
 
----
+### Mission 4: Production Migration (if needed)
+```powershell
+# Production (balanced)
+python -m fabric.migration.production --mode production
+# Turbo (higher throughput)
+python -m fabric.migration.production --mode turbo
+# Working / conservative
+python -m fabric.migration.production --mode working
+```
+
 
 ## 🔍 What You'll See
 
-### Success Indicators
-```bash
-✅ ACCESS TOKEN VALID - Expires: XX/XX/2025 XX:XX:XX
-✅ Scanned 376,888 files in 25.4s (14817 files/sec)
-✅ SUCCESS: Uploaded: test_upload/test_api_working.py (8,485 bytes)
+### Success Indicators (examples)
+```text
+✅ ACCESS TOKEN VALID - Expires: 2025-09-05 15:05:12
+✅ Loaded file cache (N files)
+✅ SUCCESS: Uploaded test_upload/test_api_working.py (validation)
 ```
 
-### Expected "Failures" (Files Already Exist)
-```bash
-📊 Progress: X.X% | Speed: XXX files/sec | Success: 0/50
-# This means files already exist - not actual failures!
+### Expected "Conflicts" (Already Uploaded)
+```text
+⚠️ File exists (skipped/failed due to conflict) — normal if rerunning full set
 ```
 
-### Dashboard View
-- **Success count:** 375,993 (from previous migration)
-- **Total files:** 376,888
-- **Progress:** Monitoring existing migration state
-
----
 
 ## 🚨 Common Quick Fixes
 
-### Fix 1: Token Expired
-```bash
-# Symptoms: 401 Unauthorized errors
-# Solution: Generate fresh token
-powershell.exe -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
+### Token Expired
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts/powershell/get_access_token.ps1
 ```
 
-### Fix 2: Wrong Directory
-```bash
-# If you see "can't open file" errors
-# Make sure you're in the right directory:
+### Wrong Directory
+```powershell
 Get-Location
-# Should show: ...\Commercial_ACA_taskforce
 ```
 
-### Fix 3: Environment Not Active
-```bash
-# Activate the correct conda environment
+### Environment Not Active
+```powershell
 conda activate aca_taskforce_env
 python -c "import aiofiles; print('✅ Ready')"
 ```
 
----
 
 ## 📋 Essential Commands
 
-### Token Management
-```bash
-# Generate new token (do this first!)
-powershell.exe -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
-
-# Check token expiry in logs
-# Look for: "Token expires: XX/XX/2025 XX:XX:XX"
+### Token
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File scripts/powershell/get_access_token.ps1
 ```
 
-### Migration Commands
-```bash
-# Validated working version (single file test)
-python onelake_migrator_turbo_working.py
-
-# Production turbo version (10 workers)
-python src/fabric/onelake_migrator_turbo_fixed.py --workers 10
-
-# Resume from previous run
-python src/fabric/onelake_migrator_turbo_fixed.py --resume
+### Migration (Unified)
+```powershell
+# Production
+python -m fabric.migration.production --mode production
+# Turbo
+python -m fabric.migration.production --mode turbo
+# Working
+python -m fabric.migration.production --mode working
+# Test run (5 batches)
+python -m fabric.migration.production --test-run
+# or Makefile shortcut
+make migrate-test-run
+# Retry failures (all or capped)
+python -m fabric.migration.production --retry-failures --max-retry 250
+# Reconcile counters
+python -m fabric.migration.production --reconcile-progress
+# No‑op (list first five entries, zero uploads)
+python -m fabric.migration.production --noop
+# or
+make migrate-noop
+# Structured JSON logs + custom run id
+$env:MIGRATION_JSON_LOGS=1; $env:MIGRATION_RUN_ID="quickstart-demo"; python -m fabric.migration.production --test-run
 ```
 
-### Monitoring Commands
-```bash
-# Start dashboard
-python src/monitoring/simple_dashboard.py
-
-# Enhanced monitoring
-python src/monitoring/enhanced_dashboard.py
-
-# Check progress files
-ls *progress*.json
+### Monitoring (Default Port 8052)
+```powershell
+python src/monitoring/simple_dashboard.py --port 8052
+# or with Makefile variable override
+make DASHBOARD_PORT=9001 dashboard
 ```
 
----
 
-## 🎯 5-Minute Success Path
+## 🎯 5-Minute Success Path (With Pre-flight)
 
-### Step 1: Environment Check (30 seconds)
-```bash
+```powershell
+make env-create
+make env-setup
 conda activate aca_taskforce_env
-python -c "import aiofiles; print('✅ Environment OK')"
+powershell.exe -ExecutionPolicy Bypass -File scripts/powershell/get_access_token.ps1
+python -m fabric.migration.production --noop
+python -m fabric.migration.production --test-run
+python src/monitoring/simple_dashboard.py --port 8052
+# Optional production / turbo
+python -m fabric.migration.production --mode turbo
 ```
 
-### Step 2: Token Generation (1 minute)
-```bash
-powershell.exe -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
-# Wait for: "Access token obtained successfully!"
-```
-
-### Step 3: Test Upload (2 minutes)
-```bash
-python onelake_migrator_turbo_working.py
-# Look for: "SUCCESS: Uploaded: test_upload/test_api_working.py"
-```
-
-### Step 4: Start Monitoring (1 minute)
-```bash
-python src/monitoring/simple_dashboard.py
-# Open: http://localhost:8051
-```
-
-### Step 5: Production Run (Optional)
-```bash
-# Only if you need to migrate new/changed files
-python src/fabric/onelake_migrator_turbo_fixed.py --workers 10
-```
-
----
 
 ## 🔍 What Success Looks Like
 
-### ✅ Perfect Token Generation
-```
-🔑 Authenticating to Azure AD...
-✅ Access token obtained successfully!
-📅 Token expires: 09/05/2025 15:05:12
-⏱️  Valid for: 1.4 hours
-💾 Token saved to config/.env
+```text
+🔑 Access token loaded / refreshed
+✅ Test batch succeeded
+📊 Dashboard running at: http://localhost:8052
 ```
 
-### ✅ Successful Test Upload
-```
-🔍 Testing OneLake API connectivity...
-✅ SUCCESS: Uploaded: test_upload/test_api_working.py (8,485 bytes)
-🎯 OneLake API is working correctly!
-```
-
-### ✅ Dashboard Running
-```
-🚀 SharePoint Progress Monitor
-📊 Dashboard running at: http://localhost:8051
-🔄 Auto-refresh every 5 seconds
-📁 Monitoring: C:/commercial_pdfs/downloaded_files
-```
-
----
 
 ## 🆘 Emergency Troubleshooting
 
-### Problem: Nothing Works
-```bash
-# Nuclear option - reset everything
+### Nothing Works
+```powershell
 cd Commercial_ACA_taskforce
 conda activate aca_taskforce_env
-powershell.exe -ExecutionPolicy Bypass -File "scripts/powershell/get_access_token.ps1"
-python onelake_migrator_turbo_working.py
+powershell.exe -ExecutionPolicy Bypass -File scripts/powershell/get_access_token.ps1
+python -m fabric.migration.production --test-run
 ```
 
 ### Problem: Can't Generate Token
@@ -229,40 +191,47 @@ python onelake_migrator_turbo_working.py
 3. Confirm Azure AD permissions
 4. Try running PowerShell as administrator
 
-### Problem: Import Errors
-```bash
-# Fix Python environment
+### Import Errors / Environment Incomplete
+```powershell
 conda activate aca_taskforce_env
-pip install aiofiles aiohttp asyncio pathlib
+pip install aiofiles aiohttp msal
 ```
 
----
+### Override Defaults (Advanced)
+Use Make variables instead of editing the Makefile:
+```powershell
+make SOURCE_DIR=D:/alt/data migrate-noop
+make WORKSPACE_ID=<guid> LAKEHOUSE_ID=<guid> fabric-migrate-azcopy-dryrun
+make DASHBOARD_PORT=9001 dashboard
+```
+
+Persistent overrides:
+```powershell
+copy local.mk.example local.mk
+# edit local.mk then run normal targets
+make migrate-prod
+```
+
 
 ## 📞 Getting Help
 
-### Check These First
-1. **Token Status:** Look for token expiry in command output
-2. **Environment:** Confirm `(aca_taskforce_env)` is shown in terminal
-3. **Directory:** Make sure you're in `Commercial_ACA_taskforce`
-4. **Files Exist:** Remember - 0% success often means files already uploaded!
-
-### Log Files to Check
-- `onelake_migration_working.log` - Migration logs
-- `migration_progress_working.json` - Progress tracking
-- Terminal output - Real-time status
-
-### Key Status Messages
-- ✅ "SUCCESS: Uploaded:" = Working correctly
-- 📊 "Success: 0/50" = Files already exist (normal!)
-- ❌ "401 Unauthorized" = Token expired (fix with new token)
-- ❌ "can't open file" = Wrong directory
+1. Check token freshness
+2. Confirm environment active
+3. Ensure you're in project root
+4. Review logs in `logs/` and progress JSON in `data/`
 
 ---
 
-**🎯 Ready to go? Start with the 5-minute success path above!**
+### 🕰️ Legacy Script Notice
+Older scripts (e.g. `onelake_migrator_turbo_working.py`) remain as temporary wrappers ONLY. They will be removed after the unified CLI is fully adopted. Always prefer:
+```powershell
+python -m fabric.migration.production --mode production
+# or
+make migrate-prod
+```
+Structured logging & correlation id details: see `FABRIC_MIGRATION_GUIDE.md`. For JSON logs:
+```powershell
+$env:MIGRATION_JSON_LOGS=1; $env:MIGRATION_RUN_ID="quickstart-demo"; python -m fabric.migration.production --test-run
+```
 
----
-
-**Last Updated:** September 2025  
-**Status:** Battle-tested and production-ready  
-**Success Rate:** 100% (proven with 376,888 files)
+**Last Updated:** September 2025 (Unified CLI Refresh + Structured Logging)**
