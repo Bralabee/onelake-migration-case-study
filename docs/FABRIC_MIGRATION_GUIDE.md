@@ -52,51 +52,91 @@ Run the analysis first to understand your data:
 python onelake_migrator.py --analyze-only --source "C:/commercial_pdfs/downloaded_files"
 ```
 
-## Migration Features
+## Migration Features (Optimized Uploader)
 
-### 🔍 File Analysis
-- **File inventory**: Count, size, types
-- **Cost estimation**: OneLake storage costs
-- **Migration planning**: Batch sizes, duration estimates
+### 🔍 File & Scope Analysis
+* File inventory (count, cumulative bytes, type distribution)
+* Storage cost estimation (standard vs archive tiers)
+* Migration duration forecasts (adaptive based on historical MB/sec)
 
-### 📊 Metadata Extraction
-Creates rich metadata for each file:
-- File properties (size, dates, checksums)
-- Document classification (Invoice, Receipt, Contract, etc.)
-- Folder structure preservation
-- MIME type detection
+### 📊 Metadata & Integrity
+* File properties (relative path, size, modified time)
+* SHA256 hash computed during streaming (no extra file pass)
+* Optional document classification (if downstream classifier enabled)
+* Folder structure preservation (mirrors local hierarchy under `ONELAKE_BASE_PATH`)
 
-### 🚀 Bulk Transfer
-- **Batched uploads**: Configurable batch sizes
-- **Progress tracking**: Resume interrupted migrations
-- **Error handling**: Retry failed uploads
-- **Token management**: Automatic renewal
+### 🚀 High-Performance Streaming Uploads
+* Adaptive chunked streaming (4MB–32MB heuristic) – overrides via `--chunk-size-bytes`
+* Resumable partial uploads (persisted offsets in `partial_uploads.json`)
+* Automatic directory creation with cache + optional pre-creation pass
+* Robust retry (exponential backoff + jitter for 408/429/5xx)
+* Flush-after-final-chunk semantics using OneLake append/flush REST pattern
 
-### 🏗️ Delta Lake Integration
-- **Structured metadata**: Queryable file catalog
-- **Version control**: Delta Lake ACID properties
-- **Analytics ready**: Direct integration with Fabric notebooks
+### 🧠 Adaptive Chunk Logic
+| File Size | Default Chunk |
+|-----------|---------------|
+| < 16MB | 4MB |
+| < 128MB | 8MB |
+| < 512MB | 16MB |
+| ≥ 512MB | 32MB |
+
+### 📈 Progress & Metrics
+* `migration_progress_optimized.json` stores:
+    * `completed_files`: array of objects `{file, sha256, size}`
+    * `failed_files`: `{file, error, step, timestamp}`
+    * `stats`: `{total_files, processed_files, successful_uploads, failed_uploads, uploaded_bytes, total_bytes, avg_upload_speed}`
+* Files/sec and MB/sec logged at completion (throughput derived from streamed bytes)
+
+### 🧩 Resumable State Files
+| File | Purpose |
+|------|---------|
+| `partial_uploads.json` | Track next append `position` for in-progress large files |
+| `dir_cache.json` | Avoid duplicate directory creation calls |
+| `file_cache_optimized.json` | Source file discovery cache |
+
+### 🏗️ Delta Lake / Fabric Integration
+* Metadata (if exported) can seed Delta tables for file lineage
+* Hash values enable downstream integrity validation or deduping
+* Compatible with Fabric notebooks & Lakehouse file queries
+
+### 🔐 Authentication
+* Client credentials flow; token auto-refresh
+* Scope: `https://storage.azure.com/.default`
+
+### 🛡️ Reliability
+* Transient-safe: partial progress persisted before retries
+* Fail-fast optional (`--fail-fast`) or continue collecting failures
+* Clear restart options via `--reset-progress`
 
 ## Usage Examples
 
-### Full Migration
-```bash
-# Run complete migration
-python onelake_migrator.py --source "C:/commercial_pdfs/downloaded_files" --batch-size 50
+### Optimized Migration (New Script)
+Primary optimized script: `onelake_migrator_turbo_fixed.py`
 
-# Resume interrupted migration
-python onelake_migrator.py --resume --source "C:/commercial_pdfs/downloaded_files"
+```bash
+# Minimal test (first 5 files, verbose HTTP steps)
+python src/fabric/onelake_migrator_turbo_fixed.py \
+    --source ./downloaded_files --limit 5 --verbose
+
+# Enable resumable chunk uploads & pre-create directories
+python src/fabric/onelake_migrator_turbo_fixed.py \
+    --source ./downloaded_files --enable-resume-chunks --precreate-dirs
+
+# Force a larger chunk size (e.g., 64MB) for very large files
+python src/fabric/onelake_migrator_turbo_fixed.py \
+    --source ./downloaded_files --chunk-size-bytes 67108864
+
+# Clean restart ignoring previous progress & caches
+python src/fabric/onelake_migrator_turbo_fixed.py \
+    --source ./downloaded_files --reset-progress
 ```
 
-### Analysis Only
-```bash
-# Just analyze without migrating
-python onelake_migrator.py --analyze-only
-```
+### Legacy Script (Still Available)
+`onelake_migrator.py` retained for reference (batch-based, non-streaming). Prefer the optimized script for production loads.
 
 ## Expected Results
 
-### OneLake Structure
+### OneLake Structure (Result)
 ```
 /Files/SharePoint_Invoices/
 ├── Plant Invoices/
@@ -150,7 +190,7 @@ df.filter(df.file_size_bytes > 10*1024*1024).display()
 - Compliance monitoring
 - Backup scheduling
 
-## Troubleshooting
+## Troubleshooting (Expanded)
 
 ### Common Issues
 
@@ -165,14 +205,26 @@ df.filter(df.file_size_bytes > 10*1024*1024).display()
 - Check Azure AD app status
 
 **Large File Uploads**
-- Use smaller batch sizes for large files
-- Monitor network connectivity
-- Consider OneLake file size limits
+* Use streaming script (default) – no need for manual splitting
+* If throttled, reduce concurrent processes (if you add external parallelism)
+
+**Resume Not Working**
+* Confirm `--enable-resume-chunks` flag used
+* Inspect `partial_uploads.json` for file entry with next position
+* Delete entry to force full re-upload
+
+**Hash Missing In Progress**
+* Ensure you are using `onelake_migrator_turbo_fixed.py`
+* Confirm file completed (hash only persisted on final flush)
 
 **Memory Issues**
-- Large file lists may cause memory errors
-- Increase batch processing
-- Use streaming for metadata extraction
+* Streaming avoids loading entire file – if still high, check other processes
+* Disable any external buffering layers
+
+**Throughput Lower Than Expected**
+* Check network bandwidth & latency
+* Increase chunk size via `--chunk-size-bytes` (balanced with error recovery granularity)
+* Avoid running multiple heavy I/O jobs concurrently on same disk
 
 ## Cost Considerations
 
@@ -199,7 +251,15 @@ Based on analysis, your migration will cost approximately:
 4. **Execute migration** in production
 5. **Set up Fabric analytics** for insights
 
-## Support
+## Support & Artifacts
+
+Key JSON artifacts:
+* `migration_progress_optimized.json` – authoritative progress & stats
+* `partial_uploads.json` – resume offsets
+* `dir_cache.json` – directory creation cache
+* `file_cache_optimized.json` – discovered source files
+
+For integrity validation you can re-hash a subset of uploaded OneLake files and compare to stored SHA256.
 
 For issues with this migration tool:
 1. Check logs in `migration_progress.json`

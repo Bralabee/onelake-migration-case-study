@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onelake-migration"
+version = "0.1.0"
+description = "SharePoint to Microsoft Fabric OneLake migration toolkit (downloader + migrator + orchestrator)"
+authors = [ { name = "GitHub Copilot" } ]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "aiohttp>=3.9.0",
+  "aiofiles>=23.0.0",
+  "python-dotenv>=1.0.0",
+  "requests>=2.31.0"
+]
+
+[project.scripts]
+onelake-download = "onelake_migration.cli:download_main"
+onelake-migrate = "onelake_migration.cli:migrate_main"
+onelake-orchestrate = "onelake_migration.cli:orchestrate_main"
+
+[tool.setuptools.packages.find]
+where = ["src_pkg"]
+

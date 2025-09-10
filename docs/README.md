@@ -16,12 +16,13 @@ This project automates the download of files from Microsoft SharePoint/Teams usi
 
 ## 🎯 Overview
 
-The SharePoint File Download Automation provides two versions:
+The SharePoint File Download Automation provides two download-phase scripts and now pairs with a separate OneLake uploader for ingestion:
 
-1. **Standard Version** (`dll_pdf_fabric.py`) - Reliable sequential downloads
-2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) - High-speed parallel downloads
+1. **Standard Version** (`dll_pdf_fabric.py`) – Reliable sequential downloads
+2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) – High-speed parallel downloads
+3. **(Post-Download) OneLake Uploader** (`src/fabric/onelake_migrator_turbo_fixed.py`) – Adaptive chunked + resumable streaming to Fabric OneLake (see project root README in case study folder)
 
-### Key Features
+### Key Features (Download Phase)
 
 - **Authenticated Access**: Uses Azure AD service principal for secure access
 - **Recursive Download**: Downloads all files from folders and subfolders
@@ -53,15 +54,14 @@ Your Azure AD app registration needs these Microsoft Graph permissions:
 ## 🚀 Setup
 
 ### 1. Environment Setup
-
 ```bash
 # Clone or navigate to the project directory
 cd Commercial_ACA_taskforce
 
 # Create conda environment
 make env-create
-# OR manually:
-# conda env create -f environment.yml
+# OR manually
+conda env create -f environment.yml
 
 # Activate environment
 conda activate aca_taskforce_env
@@ -78,6 +78,9 @@ conda activate aca_taskforce_env
 
 2. **Configure Permissions**:
    - Go to "API permissions"
+   - Add permission → Microsoft Graph → Application permissions
+   - Add: `Sites.Read.All`, `Files.Read.All`
+   - Click "Grant admin consent"
    - Add permission → Microsoft Graph → Application permissions
    - Add: `Sites.Read.All`, `Files.Read.All`
    - Click "Grant admin consent"
@@ -365,29 +368,32 @@ Enable detailed debugging by modifying the script:
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 ```
 
-## 📁 File Structure
+## 📁 File Structure (Download + Upload Context)
 
 ```
 Commercial_ACA_taskforce/
-├── dll_pdf_fabric.py          # Standard download script (sequential)
-├── dll_pdf_fabric_turbo.py    # Turbo download script (parallel)
-├── environment.yml            # Conda environment definition
-├── Makefile                   # Automation commands
-├── .env                       # Configuration (create from template)
-├── .env.template              # Configuration template
-├── .env.example               # Example configuration
-├── README.md                  # This documentation
-├── QUICK_START.md             # Quick setup guide
-├── file_list_cache.json       # File list cache (auto-generated)
-├── download_progress.json     # Progress tracking (auto-generated)
-└── downloaded_files/          # Downloaded files (created automatically)
-    ├── Folder1/
-    │   ├── file1.pdf
-    │   └── file2.docx
-    └── Folder2/
-        └── subfolder/
-            └── file3.xlsx
+├── dll_pdf_fabric.py                 # Standard download script (sequential)
+├── dll_pdf_fabric_turbo.py           # Turbo download script (parallel)
+├── src/fabric/onelake_migrator_turbo_fixed.py  # Optimized OneLake streaming uploader
+├── environment.yml                   # Conda environment definition
+├── Makefile                          # Automation commands
+├── .env / .env.template / .env.example
+├── QUICK_START.md                    # Quick setup guide
+├── file_list_cache.json              # Download phase file list cache
+├── download_progress.json            # Legacy progress tracking (sequential)
+├── download_progress_turbo.json      # Turbo progress tracking
+├── migration_progress_optimized.json # OneLake upload progress (hash + size per file)
+└── downloaded_files/                 # Downloaded files (created automatically)
+      └── ...
 ```
+
+### OneLake Upload (Post-Download)
+After downloads complete:
+```bash
+python src/fabric/onelake_migrator_turbo_fixed.py \
+   --source ./downloaded_files --enable-resume-chunks --precreate-dirs
+```
+Progress & integrity details (including per-file SHA256) stored in `migration_progress_optimized.json`.
 
 ## 🔒 Security Notes
 
@@ -423,6 +429,6 @@ For issues or questions:
 
 ---
 
-**Last Updated**: August 7, 2025  
-**Version**: 1.0  
+**Last Updated**: September 10, 2025  
+**Version**: 1.1  
 **Author**: Sanmi Ibitoye for : Commercial ACA Taskforce

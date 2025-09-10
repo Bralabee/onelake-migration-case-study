@@ -1,5 +1,7 @@
 # Quick Reference Guide
 
+> Added (Sept 2025): For OneLake uploads (post-download) use the optimized streaming uploader `src/fabric/onelake_migrator_turbo_fixed.py` which supports adaptive chunking, resumable partial uploads, and per-file SHA256 hashing. See main case study README for details.
+
 ## 🚀 Getting Started (New Users)
 
 ```bash

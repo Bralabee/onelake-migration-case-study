@@ -1,5 +1,7 @@
 # SharePoint Download Progress Files - Management Overview
 
+> NOTE (Sept 2025): A new OneLake optimized migrator introduces `migration_progress_optimized.json` with a different schema (objects containing `file`, `sha256`, `size`). This document focuses on legacy SharePoint download progress artifacts but keep in mind downstream dashboards should distinguish between legacy `download_progress*.json` and the new optimized migration progress files.
+
 ## Progress File System Analysis
 
 ### 📁 Progress Files Found
