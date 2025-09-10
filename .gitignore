@@ -204,3 +204,20 @@ site/
 !requirements.txt
 !environment.yml
 !Makefile
+
+# === Migration Orchestrator State & Reports (Added) ===
+.state/
+_archive_json/
+_archive_zero_byte/
+_legacy_archive/
+run_*.json
+temp_orch_report.json
+smoke_profile.json
+reconcile_check.json
+# Legacy top-level progress/cache files (ensure ignored going forward)
+migration_progress_optimized.json
+file_cache_optimized.json
+onelake_directories.json
+data/migration_progress_optimized.json
+data/file_cache_optimized.json
+data/onelake_directories.json
