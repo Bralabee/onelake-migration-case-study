@@ -78,14 +78,26 @@ def check_python() -> bool:
 
 
 def load_env_file():
-    # Already loaded by user? Support auto-loading .env if present.
-    env_path = pathlib.Path('.env')
-    if env_path.is_file():
-        for line in env_path.read_text().splitlines():
-            if not line or line.strip().startswith('#') or '=' not in line:
-                continue
-            k,v = line.split('=',1)
-            os.environ.setdefault(k.strip(), v.strip())
+    # Search multiple candidate .env locations; first wins.
+    candidates = [
+        pathlib.Path('.env'),
+        pathlib.Path('config/.env'),
+        pathlib.Path('../config/.env'),
+        pathlib.Path('../../config/.env')
+    ]
+    loaded = False
+    for path in candidates:
+        if path.is_file():
+            for line in path.read_text().splitlines():
+                if not line or line.strip().startswith('#') or '=' not in line:
+                    continue
+                k,v = line.split('=',1)
+                os.environ.setdefault(k.strip(), v.strip())
+            ok(f"Loaded environment variables from {path}")
+            loaded = True
+            break
+    if not loaded:
+        warn("No .env file found in default search paths; relying on existing environment")
 
 
 def check_required_env(strict: bool) -> Tuple[bool, Dict[str,str]]:
