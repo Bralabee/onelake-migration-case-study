@@ -391,3 +391,51 @@ fabric-help:
 	@echo "  • Azure AD app with Fabric permissions"
 	@echo "  • For AzCopy: Install AzCopy and authenticate with 'azcopy login'"
 	@echo "  • Read docs/FABRIC_MIGRATION_GUIDE.md for setup details"
+
+# Cross-platform shell detection (POSIX fallback)
+UNAME_S := $(shell uname 2>/dev/null)
+IS_WINDOWS := $(findstring Windows,$(OS))
+POWERSHELL := powershell
+ifeq ($(UNAME_S),Linux)
+  POWERSHELL := pwsh
+endif
+ifeq ($(UNAME_S),Darwin)
+  POWERSHELL := pwsh
+endif
+
+# POSIX-friendly copy using cp if available
+CP ?= cp
+
+# Portable env setup (creates .env from template) - works on Linux/macOS
+env-setup-posix:
+	@echo "⚙️  (POSIX) Setting up configuration..."
+	@if [ -f $(ENV_CONFIG) ]; then \
+	  echo "⚠️  .env exists. Creating backup .env.backup"; \
+	  $(CP) $(ENV_CONFIG) $(ENV_CONFIG).backup; \
+	fi
+	$(CP) $(ENV_TEMPLATE) $(ENV_CONFIG)
+	@echo "✅ Configuration template copied to .env (POSIX)"
+
+# Run preflight checks (environment must be active or conda run used)
+preflight:
+	@echo "🩺 Running preflight validation..."
+	@conda run -n $(ENV_NAME) python scripts/preflight_check.py || (echo "❌ Preflight failed" && exit 1)
+	@echo "✅ Preflight succeeded"
+
+# Convenience target: create env, setup config (POSIX), run preflight
+bootstrap-posix: env-create env-setup-posix preflight
+	@echo "🎯 POSIX bootstrap complete. Edit .env then run: make download"
+
+# Fast token sanity (Graph metadata) without MSAL full logic - optional future
+# token-check:
+# 	@echo "🔐 Token check not yet implemented in POSIX section"
+
+# Override help to append new targets info
+help: help-posix-extension
+
+help-posix-extension:
+	@echo ""
+	@echo "🌐 Cross-Platform Extensions:" \
+	&& echo "  make env-setup-posix    POSIX-safe .env template copy" \
+	&& echo "  make preflight          Run preflight validation script" \
+	&& echo "  make bootstrap-posix    Create env + config + preflight (Linux/macOS)"

@@ -29,6 +29,7 @@ import multiprocessing as mp
 from functools import partial
 import requests
 from threading import Lock
+import random
 
 # Setup logging first
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -51,6 +52,14 @@ for env_path in env_paths:
 else:
     load_dotenv()  # Fallback to default behavior
     logger.warning("⚠️  Using default .env loading - may not find config files")
+
+# Transient status codes to retry
+TRANSIENT_STATUS = {408,429,500,502,503,504}
+
+# Helper for backoff delay
+def _compute_backoff(attempt:int, base:float=1.0, jitter:float=0.3):
+    exp = base * (2 ** (attempt-1))
+    return exp + random.uniform(0, jitter*exp)
 
 class OptimizedOneLakeMigrator:
     """High-performance OneLake migrator optimized for large file volumes."""
@@ -85,6 +94,13 @@ class OptimizedOneLakeMigrator:
         
         # Thread safety
         self.progress_lock = Lock()
+        
+        # Retry settings
+        self.retry_max_attempts = int(os.environ.get('RETRY_MAX_ATTEMPTS', '5'))
+        try:
+            self.retry_base_delay = float(os.environ.get('RETRY_BASE_DELAY_SECONDS', '1.0'))
+        except ValueError:
+            self.retry_base_delay = 1.0
         
     def get_fabric_token(self) -> str:
         """Get access token for Microsoft Fabric and OneLake."""
@@ -170,33 +186,60 @@ class OptimizedOneLakeMigrator:
             "Content-Type": "application/octet-stream"
         }
         
-        try:
-            async with aiofiles.open(source_path, 'rb') as f:
-                file_data = await f.read()
-            
-            # Azure Data Lake Gen2 API pattern for OneLake
-            # Step 1: Create the file
-            async with session.put(upload_url, headers=headers) as create_response:
-                if create_response.status not in [200, 201]:
-                    return {"success": False, "file": relative_path, "error": f"Create failed: HTTP {create_response.status}"}
-            
-            # Step 2: Append data
-            append_url = f"{upload_url}?action=append&position=0"
-            async with session.patch(append_url, headers=headers, data=file_data) as append_response:
-                if append_response.status not in [200, 202]:
-                    return {"success": False, "file": relative_path, "error": f"Append failed: HTTP {append_response.status}"}
-            
-            # Step 3: Flush to finalize
-            flush_url = f"{upload_url}?action=flush&position={len(file_data)}"
-            async with session.patch(flush_url, headers=headers) as flush_response:
-                if flush_response.status in [200, 201]:
-                    return {"success": True, "file": relative_path, "size": len(file_data)}
-                else:
-                    return {"success": False, "file": relative_path, "error": f"Flush failed: HTTP {flush_response.status}"}
-                    
-        except Exception as e:
-            return {"success": False, "file": relative_path, "error": str(e)}
-    
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                async with aiofiles.open(source_path, 'rb') as f:
+                    file_data = await f.read()
+
+                # Step 1: Create the file
+                async with session.put(upload_url, headers=headers) as create_response:
+                    if create_response.status in TRANSIENT_STATUS:
+                        if attempt < self.retry_max_attempts:
+                            delay = _compute_backoff(attempt, self.retry_base_delay)
+                            logger.warning(f"Transient create error {create_response.status} for {relative_path}; retry {attempt}/{self.retry_max_attempts} in {delay:.2f}s")
+                            await asyncio.sleep(delay)
+                            continue
+                        return {"success": False, "file": relative_path, "error": f"Create failed after retries: HTTP {create_response.status}"}
+                    if create_response.status not in [200,201]:
+                        return {"success": False, "file": relative_path, "error": f"Create failed: HTTP {create_response.status}"}
+
+                # Step 2: Append data
+                append_url = f"{upload_url}?action=append&position=0"
+                async with session.patch(append_url, headers=headers, data=file_data) as append_response:
+                    if append_response.status in TRANSIENT_STATUS:
+                        if attempt < self.retry_max_attempts:
+                            delay = _compute_backoff(attempt, self.retry_base_delay)
+                            logger.warning(f"Transient append error {append_response.status} for {relative_path}; retry {attempt}/{self.retry_max_attempts} in {delay:.2f}s")
+                            await asyncio.sleep(delay)
+                            continue
+                        return {"success": False, "file": relative_path, "error": f"Append failed after retries: HTTP {append_response.status}"}
+                    if append_response.status not in [200,202]:
+                        return {"success": False, "file": relative_path, "error": f"Append failed: HTTP {append_response.status}"}
+
+                # Step 3: Flush
+                flush_url = f"{upload_url}?action=flush&position={len(file_data)}"
+                async with session.patch(flush_url, headers=headers) as flush_response:
+                    if flush_response.status in TRANSIENT_STATUS:
+                        if attempt < self.retry_max_attempts:
+                            delay = _compute_backoff(attempt, self.retry_base_delay)
+                            logger.warning(f"Transient flush error {flush_response.status} for {relative_path}; retry {attempt}/{self.retry_max_attempts} in {delay:.2f}s")
+                            await asyncio.sleep(delay)
+                            continue
+                        return {"success": False, "file": relative_path, "error": f"Flush failed after retries: HTTP {flush_response.status}"}
+                    if flush_response.status in [200,201]:
+                        return {"success": True, "file": relative_path, "size": len(file_data), "attempts": attempt}
+                    else:
+                        return {"success": False, "file": relative_path, "error": f"Flush failed: HTTP {flush_response.status}"}
+            except Exception as e:
+                if attempt < self.retry_max_attempts:
+                    delay = _compute_backoff(attempt, self.retry_base_delay)
+                    logger.warning(f"Exception uploading {relative_path}: {e}; retry {attempt}/{self.retry_max_attempts} in {delay:.2f}s")
+                    await asyncio.sleep(delay)
+                    continue
+                return {"success": False, "file": relative_path, "error": str(e), "attempts": attempt}
+
     async def migrate_batch_async(self, file_batch: List[Dict], token: str) -> List[Dict]:
         """Migrate a batch of files asynchronously."""
         connector = aiohttp.TCPConnector(limit=50, limit_per_host=25)
