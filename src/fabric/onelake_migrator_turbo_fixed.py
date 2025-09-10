@@ -121,6 +121,34 @@ class OptimizedOneLakeMigrator:
         response.raise_for_status()
         return response.json()["access_token"]
     
+    def get_fabric_token_with_expiry(self) -> dict:
+        """Acquire token returning token and expiry epoch seconds.
+        Uses existing access_token if provided without expiry metadata.
+        """
+        if hasattr(self, 'access_token') and self.access_token:
+            # Assume long-lived or externally refreshed; set distant expiry
+            return {"token": self.access_token, "expires_at": time.time() + 3600}
+        token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+        token_data = {
+            "grant_type": "client_credentials",
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "scope": "https://storage.azure.com/.default"
+        }
+        response = requests.post(token_url, data=token_data)
+        response.raise_for_status()
+        payload = response.json()
+        expires_in = int(payload.get('expires_in', 3600))
+        return {"token": payload['access_token'], "expires_at": time.time() + expires_in}
+
+    def _ensure_fresh_token(self, token_state: dict, safety_margin: int = 300) -> dict:
+        """Refresh token if it will expire within safety_margin seconds."""
+        if time.time() >= token_state.get('expires_at', 0) - safety_margin:
+            new_state = self.get_fabric_token_with_expiry()
+            logger.info("🔐 Refreshed Fabric token proactively")
+            return new_state
+        return token_state
+
     def scan_files_optimized(self) -> List[Dict]:
         """Optimized file scanning using multiple processes."""
         logger.info("🔍 Scanning files with optimized parallel processing...")
@@ -283,8 +311,7 @@ class OptimizedOneLakeMigrator:
         batches = [remaining_files[i:i + self.batch_size] for i in range(0, len(remaining_files), self.batch_size)]
         
         # Get authentication token
-        token = self.get_fabric_token()
-        token_refresh_time = time.time()
+        token_state = self.get_fabric_token_with_expiry()
         
         # Initialize migration stats properly
         migration_stats = progress.get("stats", {})
@@ -304,11 +331,9 @@ class OptimizedOneLakeMigrator:
         # Process batches
         for batch_idx, batch in enumerate(batches):
             batch_start_time = time.time()
-            
-            # Refresh token every 30 minutes
-            if time.time() - token_refresh_time > 1800:
-                token = self.get_fabric_token()
-                token_refresh_time = time.time()
+            # Proactive refresh (5 min margin)
+            token_state = self._ensure_fresh_token(token_state, safety_margin=300)
+            token = token_state['token']
             
             logger.info(f"📦 Processing batch {batch_idx + 1}/{len(batches)} ({len(batch)} files)")
             

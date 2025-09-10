@@ -79,21 +79,24 @@ env-activate:
 	@echo "    conda activate $(ENV_NAME)"
 
 # Configuration setup
-env-setup:
-	@echo "⚙️  Setting up configuration..."
-	@if exist $(ENV_CONFIG) ( \
-		echo "⚠️  .env file already exists. Backup created as .env.backup" && \
-		copy $(ENV_CONFIG) $(ENV_CONFIG).backup \
-	)
-	copy $(ENV_TEMPLATE) $(ENV_CONFIG)
-	@echo "✅ Configuration template copied to .env"
-	@echo "📝 Please edit .env file with your actual credentials:"
-	@echo "   - TENANT_ID (Azure AD tenant ID)"
-	@echo "   - CLIENT_ID (App registration client ID)" 
-	@echo "   - CLIENT_SECRET (App registration secret)"
-	@echo "   - SP_HOSTNAME (SharePoint domain)"
-	@echo "   - SP_SITE_PATH (Site path)"
-	@echo "   - SP_START_FOLDER (Folder to download from)"
+env-setup-unified:
+	@echo "⚙️  Setting up configuration (unified cross-platform)..."
+	@if [ -f $(ENV_CONFIG) ]; then \
+	  echo "⚠️  .env file already exists. Backup created as .env.backup"; \
+	  cp $(ENV_CONFIG) $(ENV_CONFIG).backup || copy $(ENV_CONFIG) $(ENV_CONFIG).backup; \
+	fi
+	@# Attempt POSIX cp first, fallback to Windows copy
+	@if cp $(ENV_TEMPLATE) $(ENV_CONFIG) 2>/dev/null; then \
+	  echo "✅ Copied template via cp"; \
+	else \
+	  copy $(ENV_TEMPLATE) $(ENV_CONFIG); \
+	  echo "✅ Copied template via copy"; \
+	fi
+	@echo "📝 Edit .env with required credentials"
+
+# Backward compatibility alias
+env-setup-posix: env-setup-unified
+env-setup: env-setup-unified
 
 # Status checks
 status:
@@ -434,8 +437,8 @@ bootstrap-posix: env-create env-setup-posix preflight
 help: help-posix-extension
 
 help-posix-extension:
-	@echo ""
-	@echo "🌐 Cross-Platform Extensions:" \
-	&& echo "  make env-setup-posix    POSIX-safe .env template copy" \
-	&& echo "  make preflight          Run preflight validation script" \
-	&& echo "  make bootstrap-posix    Create env + config + preflight (Linux/macOS)"
+	@echo "" \
+	&& echo "🌐 Cross-Platform Extensions:" \
+	&& echo "  make env-setup            Unified .env template copy (all platforms)" \
+	&& echo "  make preflight            Run preflight validation script" \
+	&& echo "  make bootstrap-posix      Create env + config + preflight (Linux/macOS)"
