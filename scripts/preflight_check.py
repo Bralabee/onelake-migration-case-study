@@ -124,8 +124,10 @@ def check_numeric(strict: bool) -> bool:
             warn(f"{k} not set, using default assumptions")
             if strict: good = False
             continue
+        # Strip inline comments after a '#'
+        raw_clean = raw.split('#',1)[0].strip()
         try:
-            val = float(raw)
+            val = float(raw_clean)
         except ValueError:
             err(f"{k} must be numeric, got '{raw}'")
             good = False
