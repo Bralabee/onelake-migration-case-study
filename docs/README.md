@@ -16,13 +16,14 @@ This project automates the download of files from Microsoft SharePoint/Teams usi
 
 ## 🎯 Overview
 
-The SharePoint File Download Automation provides two download-phase scripts and now pairs with a separate OneLake uploader for ingestion:
+The SharePoint File Download Automation provides two download-phase scripts and now pairs with a separate OneLake uploader *and* an end-to-end orchestrator for seamless download + upload flows:
 
 1. **Standard Version** (`dll_pdf_fabric.py`) – Reliable sequential downloads
 2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) – High-speed parallel downloads
-3. **(Post-Download) OneLake Uploader** (`src/fabric/onelake_migrator_turbo_fixed.py`) – Adaptive chunked + resumable streaming to Fabric OneLake (see project root README in case study folder)
+3. **(Post-Download) OneLake Uploader** (`src/fabric/onelake_migrator_turbo_fixed.py`) – Adaptive chunked + resumable streaming to Fabric OneLake (see case study root README)
+4. **End-to-End Orchestrator** (`orchestrate_onelake_migration.py`) – Chains downloader + migrator, adds bounded limits & consolidated JSON run reporting
 
-### Key Features (Download Phase)
+### Key Features (Download Phase & Orchestrator Additions)
 
 - **Authenticated Access**: Uses Azure AD service principal for secure access
 - **Recursive Download**: Downloads all files from folders and subfolders
@@ -33,6 +34,10 @@ The SharePoint File Download Automation provides two download-phase scripts and 
 - **Resume Capability**: Continue downloads from where they left off
 - **File Caching**: Smart caching with 24-hour expiration for efficiency
 - **Speed Optimization**: Parallel processing for 10-25x faster downloads
+- **New-Only Mode**: `--download-new-only` to ignore already downloaded files (tracked as `ignored_existing`)
+- **Profile Namespacing**: Use `--profile` to isolate state under `.state/<profile>/...`
+- **Orchestrated Limits**: Pair `--download-limit` and `--upload-limit` to bound smoke tests end-to-end
+- **Consolidated Metrics**: Run report captures downloader + migrator stats (`successful_this_run`, normalized `processed_files`)
 
 ## 🔧 Prerequisites
 
@@ -153,7 +158,7 @@ make env-activate  # Show activation command
 make download      # Run download script
 ```
 
-### Manual Execution
+### Manual Execution & Orchestrated Runs
 
 ```bash
 # Activate environment
@@ -164,6 +169,15 @@ python dll_pdf_fabric.py
 
 # Run the turbo script (see Speed Optimization section)
 python dll_pdf_fabric_turbo.py --conservative
+
+# Orchestrated small test (download 25, upload 25 new)
+python orchestrate_onelake_migration.py --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json
+
+# Download new files only (skip upload phase)
+python orchestrate_onelake_migration.py --download-new-only --download-limit 100 --skip-upload
+
+# Upload only (previous downloads exist)
+python orchestrate_onelake_migration.py --skip-download --upload-limit 100 --enable-resume-chunks
 ```
 
 ## 🚀 Speed Optimization
@@ -252,7 +266,7 @@ The file list cache is automatically validated and refreshed if:
 - Automatic detection of new files after 24 hours
 - Manual refresh option for immediate new file detection
 
-### Script Output
+### Script Output (Downloader Example)
 
 The script provides detailed logging:
 
@@ -368,7 +382,7 @@ Enable detailed debugging by modifying the script:
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 ```
 
-## 📁 File Structure (Download + Upload Context)
+## 📁 File Structure (Download + Upload + Orchestrator Context)
 
 ```
 Commercial_ACA_taskforce/
@@ -382,7 +396,8 @@ Commercial_ACA_taskforce/
 ├── file_list_cache.json              # Download phase file list cache
 ├── download_progress.json            # Legacy progress tracking (sequential)
 ├── download_progress_turbo.json      # Turbo progress tracking
-├── migration_progress_optimized.json # OneLake upload progress (hash + size per file)
+├── migration_progress_optimized.json # OneLake upload progress (hash + size per file, normalized metrics)
+├── orchestrate_onelake_migration.py  # End-to-end driver (download + upload)
 └── downloaded_files/                 # Downloaded files (created automatically)
       └── ...
 ```
@@ -393,7 +408,9 @@ After downloads complete:
 python src/fabric/onelake_migrator_turbo_fixed.py \
    --source ./downloaded_files --enable-resume-chunks --precreate-dirs
 ```
-Progress & integrity details (including per-file SHA256) stored in `migration_progress_optimized.json`.
+Progress & integrity details (including per-file SHA256, `successful_this_run`, normalized `processed_files`) stored in `migration_progress_optimized.json`.
+
+See `FLAGS_REFERENCE.md` for a complete matrix of downloader, migrator, and orchestrator flags plus metric definitions.
 
 ## 🔒 Security Notes
 

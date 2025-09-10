@@ -4,15 +4,30 @@
 
 ## 🚀 Getting Started (New Users)
 
+You can now run an end-to-end SharePoint download + OneLake upload via the orchestrator instead of invoking scripts separately.
+
 ```bash
-# 1. Complete setup
+# 1. Complete setup (creates env + validates)
 make run
 
 # 2. Edit .env file with your credentials
 # (Open .env file and replace placeholder values)
 
-# 3. Download files
+# 3a. Download only (turbo cached)
 make download
+
+# 3b. Orchestrated small smoke test (download 25 new, upload 25 new)
+python orchestrate_onelake_migration.py \
+	--download-limit 25 \
+	--upload-limit 25 \
+	--enable-resume-chunks \
+	--report-json run_smoke.json
+
+# 3c. Download new files only (skip already present)
+python orchestrate_onelake_migration.py --download-new-only --download-limit 100 --skip-upload
+
+# 3d. Upload only using prior downloads (resume state)
+python orchestrate_onelake_migration.py --skip-download --upload-limit 100 --enable-resume-chunks
 ```
 
 ## 🎮 Common Commands
@@ -36,6 +51,18 @@ make test          # Test configuration
 ```bash
 make download      # Run download script (uses cache if < 24h old)
 make refresh       # Force re-scan to detect new files
+```
+
+### Orchestrator (Download + Upload)
+```bash
+# Basic bounded run (download + upload)
+python orchestrate_onelake_migration.py --download-limit 50 --upload-limit 50 --enable-resume-chunks --report-json run_50.json
+
+# Profile isolation (separate state namespace)
+python orchestrate_onelake_migration.py --profile prod --download-limit 100 --upload-limit 100
+
+# Validate config only (no transfers)
+python orchestrate_onelake_migration.py --validate-config --skip-download --skip-upload
 ```
 
 ### Cache Management
@@ -100,7 +127,7 @@ make env-create
 # Verify you have access to the SharePoint site
 ```
 
-## 📊 Expected Output
+## 📊 Expected Output (Downloader Phase)
 
 ```
 🔐 Authenticating with Microsoft Graph...
@@ -120,6 +147,24 @@ Progress: 1/150 (0.7%)
 ✅ Successful: 148
 ❌ Failed: 2
 ```
+
+## 📊 Sample Orchestrator Report Extract
+
+```json
+{
+	"download": {"success": true, "stats": {"new_files_downloaded": 25, "ignored_existing": 75}},
+	"upload": {"success": true, "stats": {"successful_this_run": 25, "successful_uploads": 257}},
+	"summary": {"profile": "default", "timestamp": "2025-09-10T12:34:56Z"}
+}
+```
+
+Key new metrics:
+- `ignored_existing`: files skipped due to `--download-new-only`
+- `successful_this_run`: new uploads completed during this orchestrated run
+- `processed_files` (in migrator progress) is normalized to completed + failed after pruning
+
+## 🔗 Further Reference
+See `FLAGS_REFERENCE.md` for the complete flag & metrics matrix.
 
 ## 🆘 Need Help?
 

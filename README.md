@@ -10,6 +10,7 @@ High‑performance async tool for migrating downloaded SharePoint (or other loca
 * Partial upload state in `partial_uploads.json`
 * Throughput metrics (files/sec, MB/sec, plus `successful_this_run` for current run)
 * Verbose per‑step CREATE/APPEND/FLUSH logging (optional)
+* Normalized processed count (`processed_files` adjusted post-prune; raw pre-normalization retained as `original_processed_files`)
 
 ## Key Files
 
@@ -91,12 +92,13 @@ python orchestrate_onelake_migration.py `
 	--verbose
 ```
 
-Key Flags:
+Key Flags (see also `docs/FLAGS_REFERENCE.md` for full matrix):
 | Flag | Purpose |
 |------|---------|
 | `--download-limit N` | Cap files listed & downloaded |
 | `--upload-limit N` | Cap number of newly uploaded files (post-change semantics) |
 | `--download-mode {conservative,normal,fast,turbo}` | Downloader concurrency presets |
+| `--download-new-only` | Downloader: skip already-downloaded local files (counted as `ignored_existing`) |
 | `--skip-download` | Skip download phase |
 | `--skip-upload` | Skip upload phase |
 | `--reset-progress` | Force clean progress before upload |
@@ -116,8 +118,8 @@ Report excerpt:
 }
 ```
 
-### Updated Limit & New-Run Metrics (Uploader)
-`--upload-limit` (or migrator `--limit`) counts only *new* successful uploads this run. Metric `successful_this_run` records the delta; already completed files are skipped without consuming the allowance.
+### Updated Limit & New Metrics (Uploader & Downloader)
+`--upload-limit` (or migrator `--limit`) counts only *new* successful uploads this run. Metric `successful_this_run` records the delta; already completed files are skipped without consuming the allowance. Downloader `--download-new-only` introduces `ignored_existing` so intentional skips are distinguished from simple cache hits (`skipped_existing`).
 
 Tip: Pair `--download-limit` and `--upload-limit` for bounded smoke tests.
 
@@ -192,8 +194,8 @@ Final log line includes files/sec and MB/sec computed from `uploaded_bytes` and 
 
 ## Authoritative JSON State
 
-Active authoritative JSON files:
-* `.state/<profile>/migrator/migration_progress_optimized.json` – canonical progress + stats (with SHA256 + size per file)
+Active authoritative JSON files (post-normalization pass):
+* `.state/<profile>/migrator/migration_progress_optimized.json` – canonical progress + stats (SHA256 + size per file; includes `successful_this_run`, normalized `processed_files`, and `original_processed_files`)
 * `file_cache_optimized.json` – cached source file listing
 * `dir_cache.json` – created directory cache
 * `partial_uploads.json` – ephemeral resume state (present only while large files mid-upload)
@@ -226,7 +228,7 @@ Legacy root-level progress/cache files are auto-imported on first run for backwa
 
 Downloader cache and migrator progress embed a truncated SHA256 `context_hash` (site/drive/folder or workspace/lakehouse/base path). Mismatch => cache/progress ignored to avoid cross-environment contamination.
 
-## Validation Mode
+## Validation Mode & Integrity Checks
 
 Lightweight configuration/auth checks (no file transfers):
 
@@ -247,6 +249,8 @@ Focus areas covered: adaptive chunk sizing, streaming generator behavior, hash p
 
 ## Operational Tips
 * If progress shows 0 remaining but you added new files, delete `file_cache_optimized.json` to force re-scan.
+* Use `--download-new-only` in the downloader/orchestrator to exclude already-downloaded files (`ignored_existing` metric).
+* After each run verify: `processed_files == successful_uploads + failed_uploads` (normalization occurs at end of run if pruning removed meta entries).
 * Use `--limit` in early validation to ensure directory structure & auth are correct before full runs.
 * For very large single files you can raise `--chunk-size-bytes` (e.g., 67108864 for 64MB) but watch memory & network variability.
 
@@ -273,4 +277,4 @@ Notes:
 Env overrides: `RETRY_MAX_ATTEMPTS`, `RETRY_BASE_DELAY_SECONDS`.
 
 ---
-Maintained as part of the broader Fabric ingestion case study. Update this README when adding new flags or stats fields.
+Maintained as part of the broader Fabric ingestion case study. See `docs/FLAGS_REFERENCE.md` for exhaustive flag & metric definitions. Update this README when adding new flags or stats fields.

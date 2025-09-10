@@ -80,19 +80,34 @@ python onelake_migrator.py --analyze-only --source "C:/commercial_pdfs/downloade
 | < 512MB | 16MB |
 | ≥ 512MB | 32MB |
 
-### 📈 Progress & Metrics
-* `migration_progress_optimized.json` stores:
-    * `completed_files`: array of objects `{file, sha256, size}`
-    * `failed_files`: `{file, error, step, timestamp}`
-    * `stats`: `{total_files, processed_files, successful_uploads, failed_uploads, uploaded_bytes, total_bytes, avg_upload_speed}`
-* Files/sec and MB/sec logged at completion (throughput derived from streamed bytes)
+### 📈 Progress & Metrics (Normalized)
+`migration_progress_optimized.json` (namespaced under `.state/<profile>/migrator/`) stores:
+- `completed_files`: array of `{file, sha256, size}` (authoritative successful uploads)
+- `failed_files`: `{file, error, step, timestamp}` entries
+- `stats` object (fields):
+    - `total_files`: snapshot of discovered candidates
+    - `processed_files`: FINAL normalized count (`len(completed_files)+len(failed_files)`) after pruning
+    - `original_processed_files`: pre-normalization raw counter (retained for audit)
+    - `successful_uploads`: cumulative distinct successes (== len(completed_files))
+    - `successful_this_run`: number of new successes in the current execution (bounded by `--limit` / orchestrator `--upload-limit`)
+    - `failed_uploads`: count of failures (== len(failed_files))
+    - `uploaded_bytes` / `total_bytes`: actual vs planned bytes
+    - `avg_upload_speed`: MB/sec effective throughput
+    - `start_time` / `end_time`
+    - `context_hash`: truncated fingerprint of Fabric workspace + lakehouse + base path
+    - `schema_version`: progress schema version
+
+Normalization ensures no residual meta/support entries inflate `processed_files`. If you see a mismatch during runtime logs, the final persisted JSON should still present the normalized value.
+
+Files/sec and MB/sec appear in final summary log lines.
 
 ### 🧩 Resumable State Files
 | File | Purpose |
 |------|---------|
-| `partial_uploads.json` | Track next append `position` for in-progress large files |
+| `partial_uploads.json` | Track next append `position` for in-progress large files (removed on success) |
 | `dir_cache.json` | Avoid duplicate directory creation calls |
 | `file_cache_optimized.json` | Source file discovery cache |
+| `_archive_json/*.json` | Archived legacy/incompatible progress snapshots |
 
 ### 🏗️ Delta Lake / Fabric Integration
 * Metadata (if exported) can seed Delta tables for file lineage
@@ -110,7 +125,7 @@ python onelake_migrator.py --analyze-only --source "C:/commercial_pdfs/downloade
 
 ## Usage Examples
 
-### Optimized Migration (New Script)
+### Optimized Migration (New Script + Orchestrator Option)
 Primary optimized script: `onelake_migrator_turbo_fixed.py`
 
 ```bash
@@ -129,6 +144,13 @@ python src/fabric/onelake_migrator_turbo_fixed.py \
 # Clean restart ignoring previous progress & caches
 python src/fabric/onelake_migrator_turbo_fixed.py \
     --source ./downloaded_files --reset-progress
+
+# Orchestrated end-to-end (download + upload 50 new files) with JSON report
+python orchestrate_onelake_migration.py \
+    --download-limit 50 \
+    --upload-limit 50 \
+    --enable-resume-chunks \
+    --report-json run_50.json
 ```
 
 ### Legacy Script (Still Available)
@@ -225,6 +247,7 @@ df.filter(df.file_size_bytes > 10*1024*1024).display()
 * Check network bandwidth & latency
 * Increase chunk size via `--chunk-size-bytes` (balanced with error recovery granularity)
 * Avoid running multiple heavy I/O jobs concurrently on same disk
+* Verify `successful_this_run` is progressing (if fixed, you may have hit an `--upload-limit` cap)
 
 ## Cost Considerations
 
@@ -253,16 +276,20 @@ Based on analysis, your migration will cost approximately:
 
 ## Support & Artifacts
 
-Key JSON artifacts:
-* `migration_progress_optimized.json` – authoritative progress & stats
-* `partial_uploads.json` – resume offsets
+Key JSON artifacts (per profile namespace):
+* `migration_progress_optimized.json` – canonical progress (normalized metrics)
+* `partial_uploads.json` – resume offsets (ephemeral)
 * `dir_cache.json` – directory creation cache
 * `file_cache_optimized.json` – discovered source files
+* `_archive_json/` – archived legacy or incompatible schema snapshots
 
 For integrity validation you can re-hash a subset of uploaded OneLake files and compare to stored SHA256.
 
 For issues with this migration tool:
-1. Check logs in `migration_progress.json`
-2. Review failed files in migration logs
-3. Test individual file uploads
+1. Check logs and final normalized `processed_files` alignment
+2. Review `failed_files` entries (look at `step` and `error`)
+3. Confirm `context_hash` matches intended environment (mismatch triggers safe reset)
 4. Verify Fabric permissions and quotas
+5. If uploads appear capped early, review orchestrator `--upload-limit` or migrator `--limit`
+
+See `FLAGS_REFERENCE.md` for the complete flag and metrics matrix including downloader/orchestrator options.
