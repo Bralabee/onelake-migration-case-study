@@ -221,3 +221,14 @@ onelake_directories.json
 data/migration_progress_optimized.json
 data/file_cache_optimized.json
 data/onelake_directories.json
+
+# === Additional Cleanup (Removed Zero-Byte Legacy Placeholders) ===
+_archive_zero_byte/
+legacy_zero_byte_*/
+*_placeholder.py
+*_deprecated.py
+zero_byte_tmp/
+
+# Prevent accidental recreation of removed root-level script names (keep real sources in src/)
+/(dll_pdf_fabric|dll_pdf_fabric_turbo|onelake_migrator|onelake_migrator_turbo|onelake_migrator_turbo_fixed|fabric_discovery|fabric_setup_onelake|enhanced_dashboard|simple_dashboard|monitor_retry|retry_failed_downloads|retry_guide|simple_retry_failed|dashboard_monitor|rebuild_progress|compare_progress_files|create_onelake_directories|check_data|log_analyzer|analyze_data_sources|analyze_directory_structure|detailed_insights_test|test_env|test_insights)\.py
+
