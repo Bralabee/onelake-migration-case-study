@@ -9,7 +9,7 @@ Authoritative matrix of command-line flags, environment variables, metrics, and 
 | Downloader (Turbo) | `src/sharepoint/dll_pdf_fabric_turbo.py` | High-speed parallel SharePoint file discovery + download with caching |
 | Downloader (Standard) | `src/sharepoint/dll_pdf_fabric.py` | Sequential stable baseline (legacy) |
 | Migrator (Optimized) | `src/fabric/onelake_migrator_turbo_fixed.py` | Adaptive streaming uploads to OneLake (hash + resume) |
-| Orchestrator | `orchestrate_onelake_migration.py` | Chains downloader + migrator, produces consolidated run report |
+| Orchestrator | `python -m onelake_migration.orchestration.orchestrator` | Chains downloader + migrator, produces consolidated run report |
 
 ---
 ## 2. Downloader Flags (Turbo)
@@ -22,6 +22,8 @@ Authoritative matrix of command-line flags, environment variables, metrics, and 
 | `--download-new-only` | bool | false | Skip files already fully downloaded (counts in `ignored_existing`) |
 | `--limit N` | int | None | Cap number of files to download this run |
 | `--refresh` | bool | false | Force re-scan ignoring valid cache |
+| `--auto-refresh-if-limit-exceeds` | bool | false | If requested `--limit` > cached list size, automatically re-scan instead of truncating to cache |
+| `--max-age HOURS` | int | 24 | Override max cache age before forced re-scan |
 | `--clear-cache` | bool | false | Delete file list + progress caches then exit |
 | `--validate-config` | bool | false | Dry validation of env + auth (no listing) |
 | `--profile NAME` | str | default | Namespaces state under `.state/<profile>/downloader` |
@@ -57,6 +59,9 @@ Adaptive chunk heuristic (bytes): <16MB→4MB, <128MB→8MB, <512MB→16MB, else
 | `--upload-limit N` | int | None | Cap *new* successful uploads this run |
 | `--download-mode {conservative,normal,fast,turbo}` | str | conservative | Downloader concurrency preset |
 | `--download-new-only` | bool | false | Forwarded to downloader to skip existing local files |
+| `--download-refresh` | bool | false | Force downloader to ignore its cached SharePoint listing (passes `--refresh`) |
+| `--download-auto-refresh-if-limit-exceeds` | bool | false | Auto re-scan if `--download-limit` exceeds cached file_list length |
+| `--download-max-age HOURS` | int | inherit (24) | Override downloader cache age threshold (passes `--max-age`) |
 | `--skip-download` | bool | false | Skip downloader phase |
 | `--skip-upload` | bool | false | Skip migrator phase |
 | `--enable-resume-chunks` | bool | false | Forwarded to migrator |
@@ -140,11 +145,11 @@ Both downloader and migrator embed a truncated SHA256 `context_hash` based on cr
 ## 10. Common Usage Patterns
 | Goal | Command |
 |------|---------|
-| Small smoke test end-to-end | `python orchestrate_onelake_migration.py --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json` |
-| Download only (new files) | `python orchestrate_onelake_migration.py --download-new-only --download-limit 100 --skip-upload` |
-| Upload only (resume prior download) | `python orchestrate_onelake_migration.py --skip-download --upload-limit 200 --enable-resume-chunks` |
-| Fresh clean migrator run | `python orchestrate_onelake_migration.py --skip-download --reset-progress --enable-resume-chunks` |
-| Validate configuration only | `python orchestrate_onelake_migration.py --validate-config --skip-download --skip-upload` |
+| Small smoke test end-to-end | `python -m onelake_migration.orchestration.orchestrator --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json` |
+| Download only (new files) | `python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload` |
+| Upload only (resume prior download) | `python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 200 --enable-resume-chunks` |
+| Fresh clean migrator run | `python -m onelake_migration.orchestration.orchestrator --skip-download --reset-progress --enable-resume-chunks` |
+| Validate configuration only | `python -m onelake_migration.orchestration.orchestrator --validate-config --skip-download --skip-upload` |
 
 ---
 ## 11. Exit Codes (Validate Mode)
@@ -185,6 +190,73 @@ Progress files include `schema_version` (e.g., `1.1`). When bumped, loader archi
 | Reused upload stats flagged | `--skip-upload` used | Confirm intent; set upload limit if wanting incremental test |
 | Slow throughput | Small chunk size or network | Override with `--chunk-size-bytes`; check bandwidth |
 | Resumes not working | Missing flag or cleaned state | Add `--enable-resume-chunks`; verify `partial_uploads.json` present |
+| Download limit < desired but cache caps at smaller number | Cached `file_list_cache.json` shorter than requested, no refresh | Re-run with `--download-refresh` (orchestrator) or downloader `--refresh`, or enable `--download-auto-refresh-if-limit-exceeds` |
+| Cache not picking up new files within 24h | Newly added files but cache still valid | Use `--download-refresh` or lower `--download-max-age` (e.g., 1) |
 
 ---
 **Last Updated:** 2025-09-10
+
+---
+## 16. Understanding `source_file_cache_mismatch`
+The orchestrator adds this diagnostic block to the run report JSON when it detects a divergence between:
+
+1. `source_file_cache_count` – raw count of entries in the migrator's `file_cache_optimized.json` (all items discovered under the source directory before filtering), and
+2. `migration_stats.total_files` – the filtered count of files the migrator actually considered for upload (after excluding internal / non-content artifacts).
+
+### Why it appears
+| Trigger Scenario | What Happens | Typical Delta |
+|------------------|--------------|---------------|
+| Metadata & helper artifacts live alongside content (e.g. `file_list_cache.json`, `last_run_summary.json`) | Cache counts them; migrator excludes them | 1–5 |
+| Temporary demo/test files (`.txt`, helper markers) present in source tree | Included in cache; excluded by extension filter or later pruning | Small (<10) |
+| `--limit` lower than raw cache size | `total_files` reflects post-filter snapshot; cache shows full set | Potentially large, but usually you won't see a mismatch block unless non-content files also present (limit alone does not trigger) |
+| Stale cache after adding new real files (no `--refresh` and age < max) | Cache missing new files OR includes removed ones | Variable (may be negative or positive) |
+| Partial rebuild after `--reset-progress` but lingering old cache backup inspected | You compare different snapshots manually | Any |
+
+### Interpreting the fields
+```json
+"source_file_cache_mismatch": {
+  "cache_count": 1509,
+  "migration_total_files": 1507,
+  "delta": 2,
+  "note": "Source directory has more files than migration stats recorded. Run with --reset-progress to rebuild cache if new downloads were added after initial scan."
+}
+```
+* `delta` = `cache_count - migration_total_files`.
+* A small positive delta made up only of known internal artifacts is benign.
+
+### Common benign internal artifacts
+| Path suffix | Reason excluded |
+|-------------|-----------------|
+| `file_list_cache.json` | Downloader listing cache (not to upload) |
+| `last_run_summary.json` | Downloader metrics snapshot |
+| `partial_uploads.json` | Resume bookkeeping (ephemeral) |
+| Any `.txt` demo files under `data/downloads/demo/` | Example/test placeholders |
+
+### When to take action
+Act only if one of these is true:
+1. `delta` is large AND not explained by internal artifacts (inspect non-PDF/non-target extensions).
+2. You expect newly downloaded content files but they are missing from `migration_stats.total_files`.
+3. `delta` negative (rare): indicates progress file thinks there are *more* files than raw cache—usually a stale or pruned cache; rebuild.
+
+### Remediation steps
+| Goal | Command / Action |
+|------|------------------|
+| Rebuild cache after adding/removing files | Add `--reset-progress` (migrator) or delete `.state/<profile>/migrator/file_cache_optimized.json` (last resort) |
+| Force fresh SharePoint listing before upload | Use orchestrator `--download-refresh` (passes downloader `--refresh`) |
+| Lower cache staleness window | `--download-max-age 1` (forces refresh after 1 hour) |
+| Remove internal artifacts from source tree | Move them to a `.meta/` subfolder or clean demo files |
+| Verify which entries are extra | Inspect `file_cache_optimized.json` (look for non-content extensions) |
+
+### Suppressing false positives (roadmap suggestion)
+Future improvement (optional): ignore a configurable pattern list (e.g. `*.json`, `*.txt`) when computing `source_file_cache_count`. Until implemented, keep internal artifacts outside the upload root if you want `delta = 0`.
+
+### Quick decision guide
+| Delta | Contains only known artifacts? | Action |
+|-------|-------------------------------|--------|
+| 0 | n/a | None |
+| 1–5 | Yes | Ignore |
+| 1–5 | No / unsure | Inspect cache file; confirm extensions |
+| >5 | Mostly content | Run with `--reset-progress` + `--download-refresh` |
+| Negative | n/a | Rebuild (`--reset-progress`) and re-run |
+
+---

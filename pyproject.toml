@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "onelake-migration"
 version = "0.1.0"
 description = "SharePoint to Microsoft Fabric OneLake migration toolkit (downloader + migrator + orchestrator)"
-authors = [ { name = "GitHub Copilot" } ]
+authors = [ { name = "Sanmi Ibitoye" } ]
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -38,5 +38,6 @@ onelake-migrate = "onelake_migration.cli:migrate_main"
 onelake-orchestrate = "onelake_migration.cli:orchestrate_main"
 
 [tool.setuptools.packages.find]
-where = ["src_pkg"]
+# Consolidated package layout now lives under src/
+where = ["src"]
 

@@ -3,11 +3,9 @@ import json, subprocess, sys, tempfile, os, pathlib
 def test_orchestrator_smoke_skip_phases():
     """Smoke test: run orchestrator skipping both phases to validate JSON report structure."""
     repo_root = pathlib.Path(__file__).resolve().parents[1]
-    orchestrator = repo_root / 'orchestrate_onelake_migration.py'
-    assert orchestrator.exists(), 'orchestrator script missing'
     with tempfile.TemporaryDirectory() as td:
         report_path = pathlib.Path(td) / 'report.json'
-        cmd = [sys.executable, str(orchestrator), '--skip-download', '--skip-upload', '--report-json', str(report_path)]
+        cmd = [sys.executable, '-m', 'onelake_migration.orchestration.orchestrator', '--skip-download', '--skip-upload', '--report-json', str(report_path)]
         proc = subprocess.run(cmd, cwd=str(repo_root), capture_output=True, text=True)
         assert proc.returncode == 0, f"orchestrator exited {proc.returncode}: stdout={proc.stdout}\nstderr={proc.stderr}"
         assert report_path.exists(), 'report json not created'

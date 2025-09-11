@@ -4,7 +4,7 @@ Check file cache and prepare for full migration
 """
 import json
 import os
-
+"""Moved to _legacy_archive/check_migration_scope.py (archived)."""
 # Load file cache
 print("Loading file cache...")
 with open('file_cache_optimized.json', 'r') as f:

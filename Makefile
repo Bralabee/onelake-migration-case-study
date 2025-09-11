@@ -1,4 +1,4 @@
-ENV_NAME=aca_taskforce_env
+ENV_NAME=onelake-migration
 ENV_FILE=environment.yml
 SCRIPT_FILE=src/sharepoint/dll_pdf_fabric.py
 ENV_TEMPLATE=.env.template
@@ -30,6 +30,7 @@ help:
 	@echo "Environment Management:"
 	@echo "  make env-create    Create conda environment"
 	@echo "  make env-update    Update environment with new packages"
+	@echo "  make lock          Generate multi-platform conda lock files"
 	@echo "  make env-clean     Remove conda environment"
 	@echo "  make env-activate  Show activation command"
 	@echo "  make setup-dashboard Install dashboard dependencies"
@@ -68,6 +69,11 @@ env-update:
 	@echo "🔄 Updating conda environment..."
 	conda env update -f $(ENV_FILE) --prune
 	@echo "✅ Environment updated successfully!"
+
+lock:
+	@echo "🔐 Generating multi-platform lock files (linux/osx/win)..."
+	conda run -n $(ENV_NAME) bash scripts/generate_lock.sh
+	@echo "✅ Lock files generated in locks/"
 
 env-clean:
 	@echo "🗑️  Removing conda environment..."

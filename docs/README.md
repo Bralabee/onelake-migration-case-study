@@ -21,7 +21,7 @@ The SharePoint File Download Automation provides two download-phase scripts and 
 1. **Standard Version** (`dll_pdf_fabric.py`) – Reliable sequential downloads
 2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) – High-speed parallel downloads
 3. **(Post-Download) OneLake Uploader** (`src/fabric/onelake_migrator_turbo_fixed.py`) – Adaptive chunked + resumable streaming to Fabric OneLake (see case study root README)
-4. **End-to-End Orchestrator** (`orchestrate_onelake_migration.py`) – Chains downloader + migrator, adds bounded limits & consolidated JSON run reporting
+4. **End-to-End Orchestrator** (`python -m onelake_migration.orchestration.orchestrator`) – Chains downloader + migrator, adds bounded limits & consolidated JSON run reporting
 
 ### Key Features (Download Phase & Orchestrator Additions)
 
@@ -171,13 +171,13 @@ python dll_pdf_fabric.py
 python dll_pdf_fabric_turbo.py --conservative
 
 # Orchestrated small test (download 25, upload 25 new)
-python orchestrate_onelake_migration.py --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json
+python -m onelake_migration.orchestration.orchestrator --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json
 
 # Download new files only (skip upload phase)
-python orchestrate_onelake_migration.py --download-new-only --download-limit 100 --skip-upload
+python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload
 
 # Upload only (previous downloads exist)
-python orchestrate_onelake_migration.py --skip-download --upload-limit 100 --enable-resume-chunks
+python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 100 --enable-resume-chunks
 ```
 
 ## 🚀 Speed Optimization
@@ -397,7 +397,7 @@ Commercial_ACA_taskforce/
 ├── download_progress.json            # Legacy progress tracking (sequential)
 ├── download_progress_turbo.json      # Turbo progress tracking
 ├── migration_progress_optimized.json # OneLake upload progress (hash + size per file, normalized metrics)
-├── orchestrate_onelake_migration.py  # End-to-end driver (download + upload)
+├── (orchestrator via module path)     # python -m onelake_migration.orchestration.orchestrator
 └── downloaded_files/                 # Downloaded files (created automatically)
       └── ...
 ```

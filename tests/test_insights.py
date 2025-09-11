@@ -2,7 +2,11 @@
 import json
 import sys
 sys.path.append('.')
-from simple_dashboard import SimpleProgressMonitor
+try:
+    from src.monitoring.simple_dashboard import SimpleProgressMonitor
+except ModuleNotFoundError:
+    # Backward compat for legacy flat file
+    from simple_dashboard import SimpleProgressMonitor
 
 # Test the insights generation
 monitor = SimpleProgressMonitor("C:/commercial_pdfs/downloaded_files")

@@ -610,6 +610,11 @@ class OptimizedOneLakeMigrator:
                 stats_dict["successful_uploads"] = stats_dict.get("total_files",0)
             if stats_dict.get("uploaded_bytes",0) > stats_dict.get("total_bytes",0):
                 stats_dict["uploaded_bytes"] = stats_dict.get("total_bytes",0)
+            # Clamp successful_this_run to never exceed successful_uploads or total_files
+            if stats_dict.get("successful_this_run",0) > stats_dict.get("successful_uploads",0):
+                stats_dict["successful_this_run"] = min(stats_dict.get("successful_uploads",0), stats_dict.get("total_files",0))
+            if stats_dict.get("successful_this_run",0) > stats_dict.get("total_files",0):
+                stats_dict["successful_this_run"] = stats_dict.get("total_files",0)
             # Normalize processed_files & total_files after pruning for consistency
             try:
                 completed_len = len(progress.get("completed_files", []))
@@ -701,6 +706,11 @@ class OptimizedOneLakeMigrator:
                         prev_weight = batch_idx
                         stats["avg_upload_speed"] = (stats["avg_upload_speed"] * prev_weight + batch_speed)/(prev_weight+1)
                         stats["end_time"] = datetime.now().isoformat()
+                        # Early clamp before saving when limit hit
+                        if stats.get("successful_this_run",0) > stats.get("successful_uploads",0):
+                            stats["successful_this_run"] = min(stats.get("successful_uploads",0), stats.get("total_files",0))
+                        if stats.get("successful_this_run",0) > stats.get("total_files",0):
+                            stats["successful_this_run"] = stats.get("total_files",0)
                         progress["stats"] = stats
                         self.save_progress(progress)
                         return stats

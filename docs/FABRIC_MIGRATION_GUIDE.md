@@ -146,7 +146,7 @@ python src/fabric/onelake_migrator_turbo_fixed.py \
     --source ./downloaded_files --reset-progress
 
 # Orchestrated end-to-end (download + upload 50 new files) with JSON report
-python orchestrate_onelake_migration.py \
+python -m onelake_migration.orchestration.orchestrator \
     --download-limit 50 \
     --upload-limit 50 \
     --enable-resume-chunks \

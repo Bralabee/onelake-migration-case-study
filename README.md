@@ -62,16 +62,18 @@ python src/fabric/onelake_migrator_turbo_fixed.py --source ./data/downloads --re
 
 ## End-to-End Orchestrator (Download + Upload)
 
-Use `orchestrate_onelake_migration.py` to chain the SharePoint downloader and the OneLake migrator with one command and produce an optional consolidated JSON report.
+Preferred options:
+- Python module path: `python -m onelake_migration.orchestration.orchestrator [args]`
+- CLI entrypoint (after editable install): `onelake-orchestrate [args]`
 
 Smoke (skip phases, CI friendly):
 ```bash
-python orchestrate_onelake_migration.py --skip-download --skip-upload --report-json smoke_report.json
+python -m onelake_migration.orchestration.orchestrator --skip-download --skip-upload --report-json smoke_report.json
 ```
 
 Download 100 then upload 100 (normal mode):
 ```bash
-python orchestrate_onelake_migration.py \
+python -m onelake_migration.orchestration.orchestrator \
 	--download-limit 100 \
 	--upload-limit 100 \
 	--download-mode normal \
@@ -82,7 +84,7 @@ python orchestrate_onelake_migration.py \
 
 PowerShell variant:
 ```powershell
-python orchestrate_onelake_migration.py `
+python -m onelake_migration.orchestration.orchestrator `
 	--download-limit 100 `
 	--upload-limit 100 `
 	--download-mode turbo `
@@ -122,6 +124,50 @@ Report excerpt:
 `--upload-limit` (or migrator `--limit`) counts only *new* successful uploads this run. Metric `successful_this_run` records the delta; already completed files are skipped without consuming the allowance. Downloader `--download-new-only` introduces `ignored_existing` so intentional skips are distinguished from simple cache hits (`skipped_existing`).
 
 Tip: Pair `--download-limit` and `--upload-limit` for bounded smoke tests.
+
+## Quick Start: Large Sample Validation
+
+Run a high-speed bounded listing & download (skipping upload) to validate scale and concurrency. Force a fresh SharePoint re-scan to avoid truncated cached listings:
+
+```bash
+python -m onelake_migration.orchestration.orchestrator \
+	--download-limit 1000 \
+	--download-mode turbo \
+	--download-new-only \
+	--download-refresh \
+	--skip-upload \
+	--profile prod \
+	--report-json run_1000_refresh_only.json \
+	--verbose
+```
+
+Prefer conditional refresh instead of always forcing it? Replace `--download-refresh` with:
+
+```bash
+--download-auto-refresh-if-limit-exceeds
+```
+
+This triggers a re-scan only when your requested `--download-limit` exceeds the size of the cached file list.
+
+If you expect frequent new files during the day, add:
+
+```bash
+--download-max-age 1
+```
+
+to treat listings older than 1 hour as stale.
+
+### Downloader Cache-Control Flags (via Orchestrator)
+
+| Flag | Purpose |
+|------|---------|
+| `--download-refresh` | Force ignore cached SharePoint file listing and re-scan now. |
+| `--download-auto-refresh-if-limit-exceeds` | Auto re-scan when requested limit > cached listing length. |
+| `--download-max-age HOURS` | Treat cache as stale after HOURS (default 24) and re-scan. |
+
+Symptom & Fix: If `total_listed` stays stuck at (e.g.) 250 while requesting 500+ with no errors, the cache is simply shorter—add `--download-refresh` or the conditional auto-refresh flag.
+
+➡️ For a broader set of 15 practical scenarios (validation, ramp-up, full corpus migration, conditional refresh, incremental sync, resume, dry-run, troubleshooting), see [Quick Start Scenarios](docs/quick_start.md). Windows users: see [Windows Quick Start](docs/WINDOWS_QUICK_START.md).
 
 
 ## Command Line Flags
@@ -235,7 +281,7 @@ Lightweight configuration/auth checks (no file transfers):
 ```
 python src/sharepoint/dll_pdf_fabric_turbo.py --validate-config
 python src/fabric/onelake_migrator_turbo_fixed.py --validate-config
-python orchestrate_onelake_migration.py --validate-config --profile prod
+python -m onelake_migration.orchestration.orchestrator --validate-config --profile prod
 ```
 
 Exit codes: 0=OK, 1=missing config, 2=auth/API failure.
@@ -255,6 +301,39 @@ Focus areas covered: adaptive chunk sizing, streaming generator behavior, hash p
 * For very large single files you can raise `--chunk-size-bytes` (e.g., 67108864 for 64MB) but watch memory & network variability.
 
 ## Future Enhancements (Candidates)
+## Deleting State JSON Files – Effects & Safe Alternatives
+
+| File | Safe to Delete? | Immediate Effect | Risk / Side Effect | Preferred Alternative |
+|------|-----------------|------------------|--------------------|-----------------------|
+| `.state/<profile>/downloader/file_list_cache.json` | Yes | Forces fresh SharePoint re-scan next run (slower startup) | None (just time) | Use orchestrator `--download-refresh` or `--download-auto-refresh-if-limit-exceeds` |
+| `.state/<profile>/downloader/last_run_summary.json` | Yes | Loses last downloader metrics snapshot | Historical metrics gap | Keep; new run overwrites anyway |
+| `.state/<profile>/migrator/file_cache_optimized.json` | Yes (caution) | Rebuilt by scanning local source tree | Minor delay; if local files removed they disappear from scope | Use `--reset-progress` (archives + rebuild) |
+| `.state/<profile>/migrator/migration_progress_optimized.json` | Not recommended | Loses record of completed uploads; migrator may attempt to re-upload everything | Duplicate uploads / wasted bandwidth (unless server idempotent) | Use `--reset-progress` to archive then start clean |
+| `.state/<profile>/migrator/partial_uploads.json` | Only after success | Large in‑flight files lose resume offsets (restart from 0) | Time & bandwidth waste on big files | Leave until run completes (`--enable-resume-chunks`) |
+| `.state/<profile>/migrator/dir_cache.json` | Yes | Directories re-created (extra 201/409 chatter) | Small overhead | Leave; harmless if removed |
+| `_archive_json/*.json` | Keep for audit | None (unused by current code) | Lose forensic history | Prune only if storage constrained |
+
+### Recommended Clean Reset
+Instead of manual deletion:
+```bash
+python -m onelake_migration.orchestration.orchestrator --skip-download --reset-progress --profile prod
+```
+This archives existing migrator progress & cache, then rebuilds predictably.
+
+### When You Might Intentionally Delete
+| Scenario | Justification |
+|----------|---------------|
+| Corrupted progress JSON (unparseable) | Force regeneration; archive corrupt copy first |
+| Massive directory refactor of source tree | Old cache paths invalid; rebuild for accuracy |
+| Privacy scrub (remove file names from disk) | Archive, then securely delete state after compliance export |
+
+### Quick Decision Flow
+1. Need fresh listing? Use `--download-refresh` (avoid manual delete).
+2. Need full clean migrator state? `--reset-progress`.
+3. Only large-file resumes failing? Ensure `--enable-resume-chunks`; don't delete `partial_uploads.json` mid-run.
+4. Unsure: back up `.state/<profile>/` before any manual removal.
+
+See `docs/TROUBLESHOOTING.md` and section 16 of `docs/FLAGS_REFERENCE.md` for `source_file_cache_mismatch` explanation related to internal artifact counts.
 * Parallel hash verification against source manifest
 * Optional CRC32C alongside SHA256 for faster integrity checks
 * Multi-process batching for CPU-bound pre-processing
