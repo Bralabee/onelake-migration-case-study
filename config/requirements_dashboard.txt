@@ -13,3 +13,5 @@ flask>=2.3.0
 
 # Optional: Enhanced features
 kaleido>=0.2.1  # For static image export
+
+
