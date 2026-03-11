@@ -21,7 +21,7 @@ The SharePoint File Download Automation provides two download-phase scripts and 
 1. **Standard Version** (`dll_pdf_fabric.py`) – Reliable sequential downloads
 2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) – High-speed parallel downloads
 3. **(Post-Download) OneLake Uploader** (`src/fabric/onelake_migrator_turbo_fixed.py`) – Adaptive chunked + resumable streaming to Fabric OneLake (see case study root README)
-4. **End-to-End Orchestrator** (`python -m onelake_migration.orchestration.orchestrator`) – Chains downloader + migrator, adds bounded limits & consolidated JSON run reporting
+4. **End-to-End Orchestrator** (`conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator`) – Chains downloader + migrator, adds bounded limits & consolidated JSON run reporting
 
 ### Key Features (Download Phase & Orchestrator Additions)
 
@@ -61,7 +61,7 @@ Your Azure AD app registration needs these Microsoft Graph permissions:
 ### 1. Environment Setup
 ```bash
 # Clone or navigate to the project directory
-cd Commercial_ACA_taskforce
+cd onelake-migration-case-study
 
 # Create conda environment
 make env-create
@@ -69,7 +69,7 @@ make env-create
 conda env create -f environment.yml
 
 # Activate environment
-conda activate aca_taskforce_env
+conda activate onelake-migration
 ```
 
 ### 2. Azure App Registration
@@ -162,22 +162,22 @@ make download      # Run download script
 
 ```bash
 # Activate environment
-conda activate aca_taskforce_env
+conda activate onelake-migration
 
 # Run the standard script
-python dll_pdf_fabric.py
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric.py
 
 # Run the turbo script (see Speed Optimization section)
-python dll_pdf_fabric_turbo.py --conservative
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --conservative
 
 # Orchestrated small test (download 25, upload 25 new)
-python -m onelake_migration.orchestration.orchestrator --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json
 
 # Download new files only (skip upload phase)
-python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload
 
 # Upload only (previous downloads exist)
-python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 100 --enable-resume-chunks
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 100 --enable-resume-chunks
 ```
 
 ## 🚀 Speed Optimization
@@ -209,10 +209,10 @@ make run-turbo-fast
 make run-turbo           # Maximum speed
 
 # Direct execution with options
-python dll_pdf_fabric_turbo.py --conservative
-python dll_pdf_fabric_turbo.py --normal
-python dll_pdf_fabric_turbo.py --fast
-python dll_pdf_fabric_turbo.py --turbo
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --conservative
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --normal
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --fast
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --turbo
 
 # View speed comparison
 make compare-speeds
@@ -242,10 +242,10 @@ make refresh
 # Clear cache and force fresh scan
 make clear-cache
 # or directly
-python dll_pdf_fabric.py --clear-cache
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric.py --clear-cache
 
 # View help and options
-python dll_pdf_fabric.py --help
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric.py --help
 ```
 
 **Cache Files:**
@@ -327,7 +327,7 @@ To run automatically, use Windows Task Scheduler:
 
 3. **Configure Action**:
    - Program: `C:\path\to\conda.exe`
-   - Arguments: `run -n aca_taskforce_env python C:\path\to\dll_pdf_fabric.py`
+   - Arguments: `run -n onelake-migration python C:\path\to\src\sharepoint\dll_pdf_fabric.py`
    - Start in: `C:\path\to\Commercial_ACA_taskforce`
 
 ## 🔍 Troubleshooting
@@ -371,7 +371,7 @@ ModuleNotFoundError: No module named 'requests'
 # Recreate environment
 make env-clean
 make env-create
-conda activate aca_taskforce_env
+conda activate onelake-migration
 ```
 
 ### Debug Mode
@@ -405,7 +405,7 @@ Commercial_ACA_taskforce/
 ### OneLake Upload (Post-Download)
 After downloads complete:
 ```bash
-python src/fabric/onelake_migrator_turbo_fixed.py \
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py \
    --source ./downloaded_files --enable-resume-chunks --precreate-dirs
 ```
 Progress & integrity details (including per-file SHA256, `successful_this_run`, normalized `processed_files`) stored in `migration_progress_optimized.json`.

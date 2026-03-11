@@ -1,41 +1,64 @@
-"""Console script entrypoints (transitional).
+"""Legacy console script entrypoints (compat shim).
 
-Phase 1: still executes legacy script files via runpy.
-Future phase: will import internal modules from src/onelake_migration/*
-and deprecate direct script execution.
+This file exists only for transitional compatibility with the older `src_pkg/` layout.
+The canonical CLI now lives at `src/onelake_migration/cli.py`.
+
+These wrappers forward to the new CLI when possible.
 """
+
 from __future__ import annotations
+
+import importlib.util
 import runpy
 import sys
 from pathlib import Path
 
-try:
-    from onelake_migration.orchestration.orchestrator import main as orchestrator_main  # type: ignore
-except Exception:  # module may not be on path yet during initial install
-    orchestrator_main = None
 
-ROOT = Path(__file__).resolve().parent.parent.parent  # project root (legacy src_pkg path)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+NEW_CLI_PATH = PROJECT_ROOT / "src" / "onelake_migration" / "cli.py"
 
-# Map to original script paths
-_DOWNLOADER = ROOT / "src" / "sharepoint" / "dll_pdf_fabric_turbo.py"
-_MIGRATOR = ROOT / "src" / "fabric" / "onelake_migrator_turbo_fixed.py"
-_ORCHESTRATOR = None  # Deprecated wrapper removed; prefer module path orchestrator
+_FALLBACK_DOWNLOADER = PROJECT_ROOT / "src" / "sharepoint" / "dll_pdf_fabric_turbo.py"
+_FALLBACK_MIGRATOR = PROJECT_ROOT / "src" / "fabric" / "onelake_migrator_turbo_fixed.py"
 
-def _exec_script(path: Path):
+
+def _exec_script(path: Path) -> None:
     if not path.exists():
         print(f"Script not found: {path}", file=sys.stderr)
         raise SystemExit(2)
-    # Emulate running as __main__
     runpy.run_path(str(path), run_name="__main__")
 
-def download_main():  # onelake-download
-    _exec_script(_DOWNLOADER)
 
-def migrate_main():  # onelake-migrate
-    _exec_script(_MIGRATOR)
+def _load_new_cli():
+    if not NEW_CLI_PATH.exists():
+        return None
+    spec = importlib.util.spec_from_file_location("_onelake_migration_cli", NEW_CLI_PATH)
+    if spec is None or spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-def orchestrate_main():  # onelake-orchestrate
-    if orchestrator_main:
-        raise SystemExit(orchestrator_main())
-    print("orchestrator module not importable; please run: python -m onelake_migration.orchestration.orchestrator", file=sys.stderr)
+
+def download_main() -> None:  # onelake-download
+    cli = _load_new_cli()
+    if cli is not None:
+        return cli.download_main()
+    _exec_script(_FALLBACK_DOWNLOADER)
+
+
+def migrate_main() -> None:  # onelake-migrate
+    cli = _load_new_cli()
+    if cli is not None:
+        return cli.migrate_main()
+    _exec_script(_FALLBACK_MIGRATOR)
+
+
+def orchestrate_main() -> None:  # onelake-orchestrate
+    cli = _load_new_cli()
+    if cli is not None:
+        return cli.orchestrate_main()
+    print(
+        "orchestrator module not importable; please run: python -m onelake_migration.orchestration.orchestrator",
+        file=sys.stderr,
+    )
     raise SystemExit(2)

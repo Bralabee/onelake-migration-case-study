@@ -32,7 +32,7 @@ Use the provided `environment.yml` (already in repo):
 
 ```bash
 conda env create -f environment.yml  # first time
-conda activate aca_taskforce_env
+conda activate onelake-migration
 conda env update -f environment.yml  # later updates
 ```
 
@@ -52,28 +52,28 @@ FABRIC_ACCESS_TOKEN= (optional pre-fetched)
 
 Basic run (resume by default):
 ```bash
-python src/fabric/onelake_migrator_turbo_fixed.py --source ./data/downloads --limit 10 --verbose
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py --source ./data/downloads --limit 10 --verbose
 ```
 
 Fresh run ignoring cached progress:
 ```bash
-python src/fabric/onelake_migrator_turbo_fixed.py --source ./data/downloads --reset-progress
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py --source ./data/downloads --reset-progress
 ```
 
 ## End-to-End Orchestrator (Download + Upload)
 
 Preferred options:
-- Python module path: `python -m onelake_migration.orchestration.orchestrator [args]`
+- Python module path: `conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator [args]`
 - CLI entrypoint (after editable install): `onelake-orchestrate [args]`
 
 Smoke (skip phases, CI friendly):
 ```bash
-python -m onelake_migration.orchestration.orchestrator --skip-download --skip-upload --report-json smoke_report.json
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --skip-download --skip-upload --report-json smoke_report.json
 ```
 
 Download 100 then upload 100 (normal mode):
 ```bash
-python -m onelake_migration.orchestration.orchestrator \
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator \
 	--download-limit 100 \
 	--upload-limit 100 \
 	--download-mode normal \
@@ -84,7 +84,7 @@ python -m onelake_migration.orchestration.orchestrator \
 
 PowerShell variant:
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
 	--download-limit 100 `
 	--upload-limit 100 `
 	--download-mode turbo `
@@ -130,7 +130,7 @@ Tip: Pair `--download-limit` and `--upload-limit` for bounded smoke tests.
 Run a high-speed bounded listing & download (skipping upload) to validate scale and concurrency. Force a fresh SharePoint re-scan to avoid truncated cached listings:
 
 ```bash
-python -m onelake_migration.orchestration.orchestrator \
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator \
 	--download-limit 1000 \
 	--download-mode turbo \
 	--download-new-only \
@@ -279,9 +279,9 @@ Downloader cache and migrator progress embed a truncated SHA256 `context_hash` (
 Lightweight configuration/auth checks (no file transfers):
 
 ```
-python src/sharepoint/dll_pdf_fabric_turbo.py --validate-config
-python src/fabric/onelake_migrator_turbo_fixed.py --validate-config
-python -m onelake_migration.orchestration.orchestrator --validate-config --profile prod
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --validate-config
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py --validate-config
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --validate-config --profile prod
 ```
 
 Exit codes: 0=OK, 1=missing config, 2=auth/API failure.
@@ -289,7 +289,7 @@ Exit codes: 0=OK, 1=missing config, 2=auth/API failure.
 ## Testing
 Run unit tests (after activating conda env):
 ```bash
-pytest -q onelake-migration-case-study/tests
+conda run -n onelake-migration pytest -q tests
 ```
 Focus areas covered: adaptive chunk sizing, streaming generator behavior, hash persistence.
 
@@ -316,7 +316,7 @@ Focus areas covered: adaptive chunk sizing, streaming generator behavior, hash p
 ### Recommended Clean Reset
 Instead of manual deletion:
 ```bash
-python -m onelake_migration.orchestration.orchestrator --skip-download --reset-progress --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --skip-download --reset-progress --profile prod
 ```
 This archives existing migrator progress & cache, then rebuilds predictably.
 

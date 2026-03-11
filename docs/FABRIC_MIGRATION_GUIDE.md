@@ -49,7 +49,7 @@ Run the analysis first to understand your data:
 
 ```bash
 # Analyze files only (no migration)
-python onelake_migrator.py --analyze-only --source "C:/commercial_pdfs/downloaded_files"
+conda run -n onelake-migration python src/fabric/onelake_migrator.py --analyze-only --source "C:/commercial_pdfs/downloaded_files"
 ```
 
 ## Migration Features (Optimized Uploader)
@@ -130,23 +130,23 @@ Primary optimized script: `onelake_migrator_turbo_fixed.py`
 
 ```bash
 # Minimal test (first 5 files, verbose HTTP steps)
-python src/fabric/onelake_migrator_turbo_fixed.py \
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py \
     --source ./downloaded_files --limit 5 --verbose
 
 # Enable resumable chunk uploads & pre-create directories
-python src/fabric/onelake_migrator_turbo_fixed.py \
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py \
     --source ./downloaded_files --enable-resume-chunks --precreate-dirs
 
 # Force a larger chunk size (e.g., 64MB) for very large files
-python src/fabric/onelake_migrator_turbo_fixed.py \
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py \
     --source ./downloaded_files --chunk-size-bytes 67108864
 
 # Clean restart ignoring previous progress & caches
-python src/fabric/onelake_migrator_turbo_fixed.py \
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py \
     --source ./downloaded_files --reset-progress
 
 # Orchestrated end-to-end (download + upload 50 new files) with JSON report
-python -m onelake_migration.orchestration.orchestrator \
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator \
     --download-limit 50 \
     --upload-limit 50 \
     --enable-resume-chunks \

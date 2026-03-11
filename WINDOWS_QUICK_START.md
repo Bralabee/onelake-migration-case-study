@@ -33,13 +33,13 @@ ONELAKE_BASE_PATH=/Files/SharePoint_Invoices
 
 ## 3. Validate Configuration
 ```powershell
-python -m onelake_migration.orchestration.orchestrator --validate-config --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --validate-config --profile prod
 ```
 Expect success message and exit code 0.
 
 ## 4. Smoke Test (No Work Performed)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --skip-download `
   --skip-upload `
   --profile prod `
@@ -49,7 +49,7 @@ python -m onelake_migration.orchestration.orchestrator `
 
 ## 5. Small Sample Run (10 Files)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --download-limit 10 `
   --upload-limit 10 `
   --download-new-only `
@@ -65,7 +65,7 @@ type run_10.json
 
 ## 6. Larger Listing With Forced Refresh
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --download-limit 1000 `
   --download-refresh `
   --download-new-only `
@@ -78,15 +78,15 @@ Purpose: re-enumerates full SharePoint tree ignoring stale cache.
 
 ## 7. Adaptive Ramp-Up (Conditional Auto-Refresh)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator --download-limit 250 --download-new-only --skip-upload --profile prod
-python -m onelake_migration.orchestration.orchestrator --download-limit 500 --download-new-only --download-auto-refresh-if-limit-exceeds --skip-upload --profile prod
-python -m onelake_migration.orchestration.orchestrator --download-limit 1000 --download-new-only --download-auto-refresh-if-limit-exceeds --skip-upload --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 250 --download-new-only --skip-upload --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 500 --download-new-only --download-auto-refresh-if-limit-exceeds --skip-upload --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 1000 --download-new-only --download-auto-refresh-if-limit-exceeds --skip-upload --profile prod
 ```
 Only rescans when requested limit exceeds cached list size.
 
 ## 8. Continuous Sync (Time-Based Cache Staleness)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --download-limit 500 `
   --download-new-only `
   --download-max-age 2 `
@@ -99,7 +99,7 @@ Listing cache older than 2 hours triggers a refresh.
 
 ## 9. Resume Interrupted Upload
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --skip-download `
   --enable-resume-chunks `
   --upload-limit 300 `
@@ -110,7 +110,7 @@ Relies on presence of partial upload state file.
 
 ## 10. Dry-Run Metadata (No Upload)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --skip-download `
   --dry-run-metadata `
   --profile prod `
@@ -120,7 +120,7 @@ Check size totals & file counts without network writes.
 
 ## 11. Partial Upload After Large Listing
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --download-limit 1000 `
   --download-refresh `
   --download-new-only `
@@ -132,7 +132,7 @@ python -m onelake_migration.orchestration.orchestrator `
 
 ## 12. Full Corpus Migration (Idempotent)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --download-new-only `
   --enable-resume-chunks `
   --precreate-dirs `
@@ -144,7 +144,7 @@ Repeat run skips already uploaded files; `successful_this_run` reflects only new
 
 ## 13. Full Corpus (First Run With Refresh)
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --download-refresh `
   --download-new-only `
   --enable-resume-chunks `
@@ -157,14 +157,14 @@ python -m onelake_migration.orchestration.orchestrator `
 ## 14. Troubleshooting Truncated Listing
 If `total_listed` < requested limit and stable:
 ```powershell
-python -m onelake_migration.orchestration.orchestrator --download-limit 800 --download-refresh --skip-upload --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 800 --download-refresh --skip-upload --profile prod
 # or
-python -m onelake_migration.orchestration.orchestrator --download-limit 800 --download-auto-refresh-if-limit-exceeds --skip-upload --profile prod
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 800 --download-auto-refresh-if-limit-exceeds --skip-upload --profile prod
 ```
 
 ## 15. Clean Progress & Throughput Benchmark
 ```powershell
-python -m onelake_migration.orchestration.orchestrator `
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator `
   --skip-download `
   --reset-progress `
   --enable-resume-chunks `

@@ -12,7 +12,7 @@ This repository is transitioning from mixed loose scripts + `src_pkg/` to a sing
 
 ### New Invocation (Preferred)
 ```
-python -m onelake_migration.orchestration.orchestrator --help
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --help
 ```
 or after install:
 ```

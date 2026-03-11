@@ -17,17 +17,17 @@ make run
 make download
 
 # 3b. Orchestrated small smoke test (download 25 new, upload 25 new)
-python -m onelake_migration.orchestration.orchestrator \
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator \
 	--download-limit 25 \
 	--upload-limit 25 \
 	--enable-resume-chunks \
 	--report-json run_smoke.json
 
 # 3c. Download new files only (skip already present)
-python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload
 
 # 3d. Upload only using prior downloads (resume state)
-python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 100 --enable-resume-chunks
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 100 --enable-resume-chunks
 ```
 
 ## 🎮 Common Commands
@@ -56,13 +56,13 @@ make refresh       # Force re-scan to detect new files
 ### Orchestrator (Download + Upload)
 ```bash
 # Basic bounded run (download + upload)
-python -m onelake_migration.orchestration.orchestrator --download-limit 50 --upload-limit 50 --enable-resume-chunks --report-json run_50.json
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 50 --upload-limit 50 --enable-resume-chunks --report-json run_50.json
 
 # Profile isolation (separate state namespace)
-python -m onelake_migration.orchestration.orchestrator --profile prod --download-limit 100 --upload-limit 100
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --profile prod --download-limit 100 --upload-limit 100
 
 # Validate config only (no transfers)
-python -m onelake_migration.orchestration.orchestrator --validate-config --skip-download --skip-upload
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --validate-config --skip-download --skip-upload
 ```
 
 ### Cache Management
