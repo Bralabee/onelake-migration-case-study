@@ -1,4 +1,4 @@
-ENV_NAME=aca_taskforce_env
+ENV_NAME=onelake-migration
 ENV_FILE=environment.yml
 SCRIPT_FILE=src/sharepoint/dll_pdf_fabric.py
 ENV_TEMPLATE=.env.template
@@ -30,6 +30,7 @@ help:
 	@echo "Environment Management:"
 	@echo "  make env-create    Create conda environment"
 	@echo "  make env-update    Update environment with new packages"
+	@echo "  make lock          Generate multi-platform conda lock files"
 	@echo "  make env-clean     Remove conda environment"
 	@echo "  make env-activate  Show activation command"
 	@echo "  make setup-dashboard Install dashboard dependencies"
@@ -69,6 +70,11 @@ env-update:
 	conda env update -f $(ENV_FILE) --prune
 	@echo "✅ Environment updated successfully!"
 
+lock:
+	@echo "🔐 Generating multi-platform lock files (linux/osx/win)..."
+	conda run -n $(ENV_NAME) bash scripts/generate_lock.sh
+	@echo "✅ Lock files generated in locks/"
+
 env-clean:
 	@echo "🗑️  Removing conda environment..."
 	conda env remove -n $(ENV_NAME) -y
@@ -79,21 +85,24 @@ env-activate:
 	@echo "    conda activate $(ENV_NAME)"
 
 # Configuration setup
-env-setup:
-	@echo "⚙️  Setting up configuration..."
-	@if exist $(ENV_CONFIG) ( \
-		echo "⚠️  .env file already exists. Backup created as .env.backup" && \
-		copy $(ENV_CONFIG) $(ENV_CONFIG).backup \
-	)
-	copy $(ENV_TEMPLATE) $(ENV_CONFIG)
-	@echo "✅ Configuration template copied to .env"
-	@echo "📝 Please edit .env file with your actual credentials:"
-	@echo "   - TENANT_ID (Azure AD tenant ID)"
-	@echo "   - CLIENT_ID (App registration client ID)" 
-	@echo "   - CLIENT_SECRET (App registration secret)"
-	@echo "   - SP_HOSTNAME (SharePoint domain)"
-	@echo "   - SP_SITE_PATH (Site path)"
-	@echo "   - SP_START_FOLDER (Folder to download from)"
+env-setup-unified:
+	@echo "⚙️  Setting up configuration (unified cross-platform)..."
+	@if [ -f $(ENV_CONFIG) ]; then \
+	  echo "⚠️  .env file already exists. Backup created as .env.backup"; \
+	  cp $(ENV_CONFIG) $(ENV_CONFIG).backup || copy $(ENV_CONFIG) $(ENV_CONFIG).backup; \
+	fi
+	@# Attempt POSIX cp first, fallback to Windows copy
+	@if cp $(ENV_TEMPLATE) $(ENV_CONFIG) 2>/dev/null; then \
+	  echo "✅ Copied template via cp"; \
+	else \
+	  copy $(ENV_TEMPLATE) $(ENV_CONFIG); \
+	  echo "✅ Copied template via copy"; \
+	fi
+	@echo "📝 Edit .env with required credentials"
+
+# Backward compatibility alias
+env-setup-posix: env-setup-unified
+env-setup: env-setup-unified
 
 # Status checks
 status:
@@ -391,3 +400,51 @@ fabric-help:
 	@echo "  • Azure AD app with Fabric permissions"
 	@echo "  • For AzCopy: Install AzCopy and authenticate with 'azcopy login'"
 	@echo "  • Read docs/FABRIC_MIGRATION_GUIDE.md for setup details"
+
+# Cross-platform shell detection (POSIX fallback)
+UNAME_S := $(shell uname 2>/dev/null)
+IS_WINDOWS := $(findstring Windows,$(OS))
+POWERSHELL := powershell
+ifeq ($(UNAME_S),Linux)
+  POWERSHELL := pwsh
+endif
+ifeq ($(UNAME_S),Darwin)
+  POWERSHELL := pwsh
+endif
+
+# POSIX-friendly copy using cp if available
+CP ?= cp
+
+# Portable env setup (creates .env from template) - works on Linux/macOS
+env-setup-posix:
+	@echo "⚙️  (POSIX) Setting up configuration..."
+	@if [ -f $(ENV_CONFIG) ]; then \
+	  echo "⚠️  .env exists. Creating backup .env.backup"; \
+	  $(CP) $(ENV_CONFIG) $(ENV_CONFIG).backup; \
+	fi
+	$(CP) $(ENV_TEMPLATE) $(ENV_CONFIG)
+	@echo "✅ Configuration template copied to .env (POSIX)"
+
+# Run preflight checks (environment must be active or conda run used)
+preflight:
+	@echo "🩺 Running preflight validation..."
+	@conda run -n $(ENV_NAME) python scripts/preflight_check.py || (echo "❌ Preflight failed" && exit 1)
+	@echo "✅ Preflight succeeded"
+
+# Convenience target: create env, setup config (POSIX), run preflight
+bootstrap-posix: env-create env-setup-posix preflight
+	@echo "🎯 POSIX bootstrap complete. Edit .env then run: make download"
+
+# Fast token sanity (Graph metadata) without MSAL full logic - optional future
+# token-check:
+# 	@echo "🔐 Token check not yet implemented in POSIX section"
+
+# Override help to append new targets info
+help: help-posix-extension
+
+help-posix-extension:
+	@echo "" \
+	&& echo "🌐 Cross-Platform Extensions:" \
+	&& echo "  make env-setup            Unified .env template copy (all platforms)" \
+	&& echo "  make preflight            Run preflight validation script" \
+	&& echo "  make bootstrap-posix      Create env + config + preflight (Linux/macOS)"

@@ -25,31 +25,59 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ✅ Environment File Support
-def load_env_file(env_file=".env"):
-    """Load environment variables from .env file if it exists."""
-    # Check multiple possible locations for .env file
-    possible_paths = [
-        env_file,  # Current directory
-        f"config/{env_file}",  # Config directory (after reorganization)
-        f"../../config/{env_file}",  # From src/sharepoint/ to config/
-        f"../config/{env_file}"  # Alternative path
-    ]
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            logger.info(f"📄 Loading environment from: {path}")
+def load_env_file_ordered(profile: str | None):
+    """Load environment variables with profile precedence.
+
+    Precedence (first found wins for each variable; existing os.environ not overwritten):
+      1. config/profiles/<profile>.env (if --profile provided)
+      2. .env in repo root / config/.env variants
+    """
+    searched = []
+    def apply_file(path: str):
+        try:
             with open(path, 'r') as f:
                 for line in f:
                     if '=' in line and not line.startswith('#'):
                         key, value = line.strip().split('=', 1)
-                        os.environ[key] = value.strip('"\'')
-            return
-    
-    logger.warning(f"⚠️  No .env file found in any of these locations: {possible_paths}")
+                        if key not in os.environ:  # do not override existing env
+                            os.environ[key] = value.strip('"\'')
+            logger.info(f"📄 Loaded env file: {path}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Failed loading {path}: {e}")
+        return False
 
-# Load .env file if it exists
-load_env_file()
+    # Candidate paths
+    candidates = []
+    if profile:
+        candidates.append(f"config/profiles/{profile}.env")
+        candidates.append(f"../../config/profiles/{profile}.env")  # relative from src/sharepoint
+    # generic .env fallbacks
+    candidates.extend([
+        ".env",
+        "config/.env",
+        "../../config/.env",
+        "../config/.env"
+    ])
+    loaded_any = False
+    for c in candidates:
+        searched.append(c)
+        if os.path.exists(c):
+            loaded_any = apply_file(c) or loaded_any
+    if not loaded_any:
+        logger.warning(f"⚠️ No env files loaded (searched: {searched})")
+
+# Parse early for --profile before rest of logic (lightweight scan of sys.argv)
+_profile = None
+for idx, tok in enumerate(sys.argv[1:]):
+    if tok == "--profile" and idx + 2 <= len(sys.argv[1:]):
+        try:
+            _profile = sys.argv[1:][idx + 1]
+        except IndexError:
+            pass
+        break
+
+load_env_file_ordered(_profile)
 
 # ✅ Configuration Parameters
 default_params = {
@@ -61,7 +89,11 @@ default_params = {
     "sp_library_name": os.environ.get("SP_LIBRARY_NAME", "Documents"),
     "sp_start_folder": os.environ.get("SP_START_FOLDER", "/"),
     "local_download_path": os.environ.get("LOCAL_DOWNLOAD_PATH", "./downloaded_files"),
-    "max_workers": 25  # Default parallel workers
+    "max_workers": 25,  # Default parallel workers
+    "state_dir": os.environ.get("STATE_DIR", ".state"),
+    "max_cache_age_hours": 24,
+    "auto_refresh_if_limit_exceeds": False,
+    "download_new_only": False
 }
 
 params = default_params
@@ -97,7 +129,7 @@ def validate_cache(cache_file, site_id, drive_id, folder_id, max_age_hours=24):
             logger.warning("⚠️ Cache configuration mismatch. Will re-scan.")
             return False
         
-        # Check cache age
+    # Check cache age
         cache_timestamp = cache_data.get("timestamp")
         if cache_timestamp:
             from datetime import datetime, timedelta
@@ -193,35 +225,65 @@ def get_folder_id(drive_id, folder_path, headers):
                 raise ValueError(f"❌ Folder '{part}' not found.")
     return folder_id
 
-def list_files_recursively(drive_id, folder_id, headers, path_prefix=""):
-    """Recursively list all files in a folder."""
-    all_files = []
+def list_files_recursively(drive_id, folder_id, headers, path_prefix="", limit=None, _collected=None):
+    """Recursively list files up to an optional limit.
+
+    Args:
+        drive_id: SharePoint drive ID.
+        folder_id: Current folder item ID ("root" for start).
+        headers: Auth headers.
+        path_prefix: Relative folder path prefix.
+        limit: Optional int cap on number of files to collect.
+        _collected: Internal accumulator list (do not pass manually).
+    Returns:
+        List[dict]: File metadata entries (up to limit if provided).
+    """
+    if _collected is None:
+        _collected = []
+
+    # Early exit if limit satisfied
+    if limit is not None and len(_collected) >= limit:
+        return _collected
+
     url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}/children"
 
     while url:
+        # Stop further paging if limit reached
+        if limit is not None and len(_collected) >= limit:
+            break
+
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
-        
+
         for item in data.get("value", []):
+            # Check limit before deeper work
+            if limit is not None and len(_collected) >= limit:
+                break
+
             if "folder" in item:
-                # Recursively process subfolders
                 logger.info(f"📁 Processing folder: {path_prefix}{item['name']}/")
-                all_files.extend(list_files_recursively(
-                    drive_id, item["id"], headers, f"{path_prefix}{item['name']}/"
-                ))
+                list_files_recursively(
+                    drive_id,
+                    item["id"],
+                    headers,
+                    f"{path_prefix}{item['name']}/",
+                    limit=limit,
+                    _collected=_collected
+                )
             else:
-                # Add file to list
-                all_files.append({
+                _collected.append({
                     "id": item["id"],
                     "name": item["name"],
                     "path": f"{path_prefix}{item['name']}",
                     "download_url": item["@microsoft.graph.downloadUrl"]
                 })
-        
+                if limit is not None and len(_collected) >= limit:
+                    break
+
         url = data.get("@odata.nextLink", None)
-    
-    return all_files
+
+    return _collected
 
 # 🚀 OPTIMIZED SESSION MANAGEMENT
 def create_optimized_session():
@@ -324,13 +386,26 @@ def download_file_safely_turbo(file_info, local_base_path, headers, drive_id=Non
     return {"status": "failed", "file": file_path, "error": "Max retries exceeded"}
 
 # 🚀 PARALLEL DOWNLOAD ENGINE
-def download_all_files_turbo(file_list, local_download_path, headers, tenant_id, client_id, client_secret, drive_id=None, max_workers=10):
+def download_all_files_turbo(file_list, local_download_path, headers, tenant_id, client_id, client_secret, drive_id=None, max_workers=10, state_base:Path|None=None, profile:str|None=None):
     """🚀 TURBO: Download all files with parallel processing for maximum speed."""
     local_download_path = Path(local_download_path)
     local_download_path.mkdir(parents=True, exist_ok=True)
     
     # Progress tracking
-    progress_file = local_download_path / "download_progress_turbo.json"
+    if state_base is None:
+        state_base = Path(params.get("state_dir", ".state"))
+    profile_key = profile or params.get("profile") or "default"
+    namespaced = state_base / profile_key / "downloader"
+    namespaced.mkdir(parents=True, exist_ok=True)
+    progress_file = namespaced / "download_progress_turbo.json"
+    # Legacy fallback import
+    legacy_progress = Path(local_download_path) / "download_progress_turbo.json"
+    if not progress_file.exists() and legacy_progress.exists():
+        try:
+            progress_file.write_text(legacy_progress.read_text())
+            logger.info("♻️ Imported legacy download_progress_turbo.json into namespaced state")
+        except Exception:
+            pass
     results = {"success": [], "failed": []}
     total_files = len(file_list)
     start_index = 0
@@ -349,23 +424,32 @@ def download_all_files_turbo(file_list, local_download_path, headers, tenant_id,
     
     # Filter out already downloaded files
     remaining_files = []
-    skipped_count = 0
+    skipped_count = 0  # legacy count of existing files treated as skips in normal mode
+    ignored_existing_count = 0  # new-only mode: existing files ignored (not counted as skips)
+    new_only = params.get("download_new_only", False)
     for i, file_info in enumerate(file_list[start_index:], start_index):
         expected_path = Path(local_download_path) / file_info["path"]
-        if not expected_path.exists():
+        exists = expected_path.exists()
+        if new_only and exists:
+            # In new-only mode we neither enqueue nor mark as skipped; we just ignore and count separately.
+            ignored_existing_count += 1
+            continue
+        if not exists:
             remaining_files.append((i, file_info))
         else:
             results["success"].append({
-                "status": "success", 
-                "file": file_info["path"], 
+                "status": "success",
+                "file": file_info["path"],
                 "local_path": str(expected_path),
                 "skipped": True
             })
             skipped_count += 1
-    
+    # (moved outside loop) announce how many will actually download once after scan
     logger.info(f"🚀 TURBO MODE: Starting parallel download of {len(remaining_files)} files using {max_workers} workers")
-    if skipped_count > 0:
+    if skipped_count > 0 and not new_only:
         logger.info(f"⏭️ Skipped {skipped_count} already downloaded files")
+    if new_only and ignored_existing_count > 0:
+        logger.info(f"🆕 New-only mode: ignored {ignored_existing_count} existing files (not counted as skips)")
     
     # Thread-safe progress tracking
     progress_lock = threading.Lock()
@@ -488,6 +572,18 @@ def download_all_files_turbo(file_list, local_download_path, headers, tenant_id,
         progress_file.unlink()
         logger.info("🗑️ Progress file cleaned up")
     
+    # Attach meta summary for caller/orchestrator (so ignored_existing persists)
+    try:
+        results["meta"] = {
+            "ignored_existing": ignored_existing_count,
+            "skipped_existing": skipped_count,
+            "total_files_considered": total_files,
+            "new_only": new_only,
+            "remaining_attempted": len(remaining_files)
+        }
+    except Exception as _e:
+        logger.warning(f"⚠️ Could not attach meta to results: {_e}")
+
     return results
 
 # ✅ Main Execution
@@ -529,15 +625,28 @@ def main():
         
         if (not force_refresh and 
             cache_file.exists() and 
-            validate_cache(cache_file, site_id, drive_id, start_folder_id)):
+            validate_cache(cache_file, site_id, drive_id, start_folder_id, max_age_hours=params.get("max_cache_age_hours",24))):
             logger.info("📂 Found valid cached file list, loading...")
             try:
                 with open(cache_file, 'r') as f:
                     cache_data = json.load(f)
-                    file_list = cache_data.get("files", [])
-                    cache_timestamp = cache_data.get("timestamp", "")
-                    logger.info(f"✅ Loaded {len(file_list)} files from cache (created: {cache_timestamp})")
-                    logger.info("💡 To detect new files, run: python dll_pdf_fabric_turbo.py --refresh")
+                    import hashlib as _hl
+                    expected_ctx = f"{cache_data.get('site_id')}|{cache_data.get('drive_id')}|{cache_data.get('folder_id')}|{sp_hostname}|{sp_site_path}|{sp_library_name}"
+                    expected_hash = _hl.sha256(expected_ctx.encode()).hexdigest()[:16]
+                    stored_hash = cache_data.get("context_hash")
+                    if stored_hash and stored_hash != expected_hash:
+                        logger.warning("⚠️ Context hash mismatch; ignoring stale cache")
+                        file_list = None
+                    else:
+                        file_list = cache_data.get("files", [])
+                        cache_timestamp = cache_data.get("timestamp", "")
+                        logger.info(f"✅ Loaded {len(file_list)} files from cache (created: {cache_timestamp})")
+                        logger.info("💡 To detect new files, run: python dll_pdf_fabric_turbo.py --refresh")
+                        # Conditional AUTO-REFRESH: only if flag enabled and user requested higher limit
+                        requested_limit = params.get("limit")
+                        if params.get("auto_refresh_if_limit_exceeds") and requested_limit and requested_limit > len(file_list):
+                            logger.info(f"🔄 AUTO-REFRESH: Requested limit {requested_limit} exceeds cached {len(file_list)}; re-scanning SharePoint (flag enabled)")
+                            file_list = None
             except Exception as e:
                 logger.warning(f"⚠️ Could not load file cache: {e}. Will re-scan.")
                 file_list = None
@@ -546,22 +655,35 @@ def main():
                 logger.info("🔄 Force refresh requested, ignoring cache")
             file_list = None
         
+        # Determine if a limit is requested (set during arg parsing)
+        limit = params.get("limit")
+
         # Scan files if needed
         if file_list is None:
             logger.info("📋 Listing files recursively...")
-            file_list = list_files_recursively(drive_id, start_folder_id, headers)
-            logger.info(f"✅ Total files found: {len(file_list)}")
+            file_list = list_files_recursively(drive_id, start_folder_id, headers, limit=limit)
+            logger.info(f"✅ Total files discovered: {len(file_list)} (limit={'∞' if limit is None else limit})")
             
             # Save to cache
             try:
                 Path(local_path).mkdir(parents=True, exist_ok=True)
+                # Metadata + context hash for invalidation across profiles/config changes
+                import hashlib as _hl
+                context_str = f"{site_id}|{drive_id}|{start_folder_id}|{sp_hostname}|{sp_site_path}|{sp_library_name}"
+                context_hash = _hl.sha256(context_str.encode()).hexdigest()[:16]
                 cache_data = {
+                    "schema_version": 1,
+                    "profile": params.get("profile") or _profile or "default",
                     "files": file_list,
                     "timestamp": datetime.now().isoformat(),
                     "total_files": len(file_list),
                     "site_id": site_id,
                     "drive_id": drive_id,
-                    "folder_id": start_folder_id
+                    "folder_id": start_folder_id,
+                    "sp_hostname": sp_hostname,
+                    "sp_site_path": sp_site_path,
+                    "sp_library_name": sp_library_name,
+                    "context_hash": context_hash
                 }
                 with open(cache_file, 'w') as f:
                     json.dump(cache_data, f, indent=2)
@@ -570,31 +692,74 @@ def main():
                 logger.warning(f"⚠️ Could not save file cache: {e}")
         else:
             logger.info(f"✅ Using cached file list: {len(file_list)} files")
-        
+            # Apply limit on cached list if requested
+            if limit is not None and len(file_list) > limit:
+                logger.info(f"🎯 Applying limit to cached list: first {limit} of {len(file_list)} files")
+                file_list = file_list[:limit]
+
         # 🚀 USE TURBO PARALLEL DOWNLOADS FOR MAXIMUM SPEED
         logger.info(f"🚀 TURBO MODE: Using {max_workers} parallel workers for maximum speed")
-        
+
         results = download_all_files_turbo(
-            file_list, local_path, headers, tenant_id, client_id, client_secret, drive_id, max_workers
+            file_list,
+            local_path,
+            headers,
+            tenant_id,
+            client_id,
+            client_secret,
+            drive_id,
+            max_workers,
+            state_base=Path(params.get("state_dir", ".state")),
+            profile=_profile
         )
-        
-        # Summary
+
+        # Summary section
         success_count = len([r for r in results["success"] if not r.get("skipped")])
         skipped_count = len([r for r in results["success"] if r.get("skipped")])
         failed_count = len(results["failed"])
-        
-        logger.info(f"🎉 TURBO Download Complete!")
+        meta = results.get("meta", {})
+        ignored_existing_count = meta.get("ignored_existing", 0)
+        new_only_mode = meta.get("new_only", params.get("download_new_only", False))
+
+        logger.info("🎉 TURBO Download Complete!")
         logger.info(f"✅ Successfully downloaded: {success_count}")
         logger.info(f"⏭️ Skipped (already existed): {skipped_count}")
+        if new_only_mode:
+            logger.info(f"📁 Ignored existing (new-only mode): {ignored_existing_count}")
         logger.info(f"❌ Failed: {failed_count}")
-        
+
+        try:
+            total_available = len(file_list)
+            summary = {
+                "timestamp": datetime.now().isoformat(),
+                "success_new": success_count,
+                "skipped_existing": skipped_count if not new_only_mode else 0,
+                "ignored_existing": ignored_existing_count if new_only_mode else 0,
+                "failed": failed_count,
+                "total_listed": total_available,
+                "limit_requested": params.get("limit"),
+                "total_available": total_available,
+                "auto_refresh_if_limit_exceeds": params.get("auto_refresh_if_limit_exceeds", False),
+                "max_cache_age_hours": params.get("max_cache_age_hours"),
+                "download_new_only": new_only_mode,
+                "profile": params.get("profile") or _profile or "default"
+            }
+            Path(local_path).mkdir(parents=True, exist_ok=True)
+            (Path(local_path)/"last_run_summary.json").write_text(json.dumps(summary, indent=2))
+            profile_key = summary["profile"]
+            state_dir = Path(params.get("state_dir", ".state")) / profile_key / "downloader"
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir/"last_run_summary.json").write_text(json.dumps(summary, indent=2))
+        except Exception as e:
+            logger.warning(f"⚠️ Could not write last_run_summary.json: {e}")
+
         if results["failed"]:
             logger.info("Failed files (first 10):")
             for failed in results["failed"][:10]:
                 logger.error(f"  - {failed['file']}: {failed['error']}")
             if len(results["failed"]) > 10:
                 logger.info(f"  ... and {len(results['failed']) - 10} more failures")
-        
+
         return results
         
     except Exception as e:
@@ -602,64 +767,131 @@ def main():
         raise
 
 if __name__ == "__main__":
-    # Parse command line arguments for speed optimization
-    max_workers = 10  # Default
-    
-    if len(sys.argv) > 1:
-        if sys.argv[1] == "--clear-cache":
+    # Enhanced argument parsing to allow multiple flags in any order
+    args = sys.argv[1:]
+    max_workers = params.get("max_workers", 10)
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--profile":
+            # already processed early for env loading; skip its value here
+            if i + 1 < len(args):
+                i += 1  # skip value
+            params["profile"] = _profile
+            i += 1
+            continue
+        if arg == "--state-dir":
+            if i + 1 >= len(args):
+                print("❌ --state-dir requires a path argument")
+                sys.exit(1)
+            params["state_dir"] = args[i+1]
+            logger.info(f"🗂️ State directory set to {args[i+1]}")
+            i += 2
+            continue
+        if arg in ("--clear-cache",):
             local_path = params.get("local_download_path", "./downloaded_files")
             clear_cache(local_path)
             sys.exit(0)
-        elif sys.argv[1] == "--refresh" or sys.argv[1] == "--force-refresh":
+        elif arg in ("--refresh", "--force-refresh"):
             logger.info("🔄 Force refresh mode: Will re-scan SharePoint for new files")
             params["force_refresh"] = True
-        elif sys.argv[1] == "--turbo":
+        elif arg == "--turbo":
             max_workers = 25
+            params["max_workers"] = max_workers
             logger.info("🚀 TURBO MODE: Using 25 parallel workers for maximum speed!")
-            params["max_workers"] = max_workers
-        elif sys.argv[1] == "--fast":
+        elif arg == "--fast":
             max_workers = 15
+            params["max_workers"] = max_workers
             logger.info("⚡ FAST MODE: Using 15 parallel workers")
-            params["max_workers"] = max_workers
-        elif sys.argv[1] == "--normal":
+        elif arg == "--normal":
             max_workers = 10
+            params["max_workers"] = max_workers
             logger.info("📈 NORMAL MODE: Using 10 parallel workers")
-            params["max_workers"] = max_workers
-        elif sys.argv[1] == "--conservative":
+        elif arg == "--conservative":
             max_workers = 5
-            logger.info("🐌 CONSERVATIVE MODE: Using 5 parallel workers (safest)")
             params["max_workers"] = max_workers
-        elif sys.argv[1] == "--help":
+            logger.info("🐌 CONSERVATIVE MODE: Using 5 parallel workers (safest)")
+        elif arg == "--limit":
+            # Next token should be an integer
+            if i + 1 >= len(args):
+                print("❌ --limit requires an integer argument")
+                sys.exit(1)
+            try:
+                limit_val = int(args[i + 1])
+                if limit_val <= 0:
+                    raise ValueError
+                params["limit"] = limit_val
+                logger.info(f"🎯 LIMIT MODE: Will process only first {limit_val} files")
+            except ValueError:
+                print("❌ --limit value must be a positive integer")
+                sys.exit(1)
+            i += 1  # Skip value token
+        elif arg == "--validate-config":
+            missing = [k for k in ["tenant_id","client_id","client_secret","sp_hostname","sp_site_path","sp_library_name"] if not params.get(k)]
+            if missing:
+                print(f"❌ Missing config: {missing}")
+                sys.exit(1)
+            try:
+                token = get_graph_token(params['tenant_id'], params['client_id'], params['client_secret'])
+                headers = {"Authorization": f"Bearer {token}"}
+                site_id = get_site_id(params['sp_hostname'], params['sp_site_path'], headers)
+                _ = get_drive_id(site_id, params['sp_library_name'], headers)
+                print("✅ Downloader configuration valid")
+                sys.exit(0)
+            except Exception as e:
+                print(f"❌ Validation failed: {e}")
+                sys.exit(2)
+        elif arg == "--max-age":
+            if i + 1 >= len(args):
+                print("❌ --max-age requires integer hours")
+                sys.exit(1)
+            try:
+                hours = int(args[i+1])
+                if hours <= 0:
+                    raise ValueError
+                params["max_cache_age_hours"] = hours
+                logger.info(f"⏰ Max cache age set to {hours}h")
+            except ValueError:
+                print("❌ --max-age must be positive integer hours")
+                sys.exit(1)
+            i += 1
+        elif arg == "--auto-refresh-if-limit-exceeds":
+            params["auto_refresh_if_limit_exceeds"] = True
+            logger.info("🔄 Auto-refresh on limit exceed ENABLED")
+        elif arg == "--download-new-only":
+            params["download_new_only"] = True
+            logger.info("🆕 Download NEW files only (existing files ignored)")
+        elif arg == "--help":
             print("🚀 SharePoint TURBO File Download Automation")
             print("============================================")
             print("Usage:")
-            print("  python dll_pdf_fabric_turbo.py                # Normal mode (10 workers)")
-            print("  python dll_pdf_fabric_turbo.py --conservative # Conservative (5 workers)")
-            print("  python dll_pdf_fabric_turbo.py --fast         # Fast mode (15 workers)")
-            print("  python dll_pdf_fabric_turbo.py --turbo        # Turbo mode (25 workers)")
-            print("  python dll_pdf_fabric_turbo.py --refresh      # Force re-scan for new files")
-            print("  python dll_pdf_fabric_turbo.py --clear-cache  # Clear all cache files")
-            print("  python dll_pdf_fabric_turbo.py --help         # Show this help")
+            print("  python dll_pdf_fabric_turbo.py [mode flags] [--limit N] [--refresh] [--clear-cache]")
             print("")
-            print("🚀 Speed Modes:")
-            print("  • Conservative: ~5-8 files/sec   (5 workers)  - Safest")
-            print("  • Normal:       ~10-15 files/sec (10 workers) - Balanced")
-            print("  • Fast:         ~15-20 files/sec (15 workers) - Faster")
-            print("  • Turbo:        ~20-30 files/sec (25 workers) - Maximum speed")
+            print("Mode Flags (choose one, optional):")
+            print("  --conservative   Use 5 workers (safest)")
+            print("  --normal         Use 10 workers (default)")
+            print("  --fast           Use 15 workers")
+            print("  --turbo          Use 25 workers (max speed)")
             print("")
-            print("⏱️  Estimated completion times for 376,882 files:")
-            print("  • Conservative: ~12-20 hours")
-            print("  • Normal:       ~6-10 hours")
-            print("  • Fast:         ~4-6 hours")
-            print("  • Turbo:        ~3-4 hours")
+            print("Additional Options:")
+            print("  --limit N        Only list & download first N files (respects cache)")
+            print("  --refresh        Force re-scan (ignore cache)")
+            print("  --clear-cache    Remove cached file list & progress files")
+            print("  --download-new-only  Only attempt downloading files not already present (ignored files not counted as skips)")
+            print("  --validate-config Validate configuration & API access then exit (0=ok)")
+            print("  --help           Show this help message")
             print("")
-            print("🎯 Features:")
+            print("Features:")
             print("  • Parallel downloads with connection pooling")
             print("  • Automatic resume from interruptions")
             print("  • Smart caching with 24h auto-expiration")
             print("  • Real-time speed monitoring")
             print("  • Thread-safe progress tracking")
             print("  • Optimized for SharePoint tempauth handling")
+            print("  • NEW: --limit for controlled sample downloads")
             sys.exit(0)
-    
+        else:
+            print(f"⚠️  Unknown argument ignored: {arg}")
+        i += 1
+
     main()

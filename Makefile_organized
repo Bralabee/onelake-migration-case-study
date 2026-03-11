@@ -1,4 +1,4 @@
-ENV_NAME=aca_taskforce_env
+ENV_NAME=onelake-migration
 ENV_FILE=environment.yml
 SCRIPT_FILE=src/sharepoint/dll_pdf_fabric.py
 ENV_TEMPLATE=.env.template

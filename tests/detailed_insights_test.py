@@ -2,7 +2,10 @@
 import json
 import sys
 sys.path.append('.')
-from simple_dashboard import SimpleProgressMonitor
+try:
+    from src.monitoring.simple_dashboard import SimpleProgressMonitor
+except ModuleNotFoundError:
+    from simple_dashboard import SimpleProgressMonitor
 
 # Test detailed insights
 monitor = SimpleProgressMonitor("C:/commercial_pdfs/downloaded_files")

@@ -16,12 +16,14 @@ This project automates the download of files from Microsoft SharePoint/Teams usi
 
 ## 🎯 Overview
 
-The SharePoint File Download Automation provides two versions:
+The SharePoint File Download Automation provides two download-phase scripts and now pairs with a separate OneLake uploader *and* an end-to-end orchestrator for seamless download + upload flows:
 
-1. **Standard Version** (`dll_pdf_fabric.py`) - Reliable sequential downloads
-2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) - High-speed parallel downloads
+1. **Standard Version** (`dll_pdf_fabric.py`) – Reliable sequential downloads
+2. **Turbo Version** (`dll_pdf_fabric_turbo.py`) – High-speed parallel downloads
+3. **(Post-Download) OneLake Uploader** (`src/fabric/onelake_migrator_turbo_fixed.py`) – Adaptive chunked + resumable streaming to Fabric OneLake (see case study root README)
+4. **End-to-End Orchestrator** (`conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator`) – Chains downloader + migrator, adds bounded limits & consolidated JSON run reporting
 
-### Key Features
+### Key Features (Download Phase & Orchestrator Additions)
 
 - **Authenticated Access**: Uses Azure AD service principal for secure access
 - **Recursive Download**: Downloads all files from folders and subfolders
@@ -32,6 +34,10 @@ The SharePoint File Download Automation provides two versions:
 - **Resume Capability**: Continue downloads from where they left off
 - **File Caching**: Smart caching with 24-hour expiration for efficiency
 - **Speed Optimization**: Parallel processing for 10-25x faster downloads
+- **New-Only Mode**: `--download-new-only` to ignore already downloaded files (tracked as `ignored_existing`)
+- **Profile Namespacing**: Use `--profile` to isolate state under `.state/<profile>/...`
+- **Orchestrated Limits**: Pair `--download-limit` and `--upload-limit` to bound smoke tests end-to-end
+- **Consolidated Metrics**: Run report captures downloader + migrator stats (`successful_this_run`, normalized `processed_files`)
 
 ## 🔧 Prerequisites
 
@@ -53,18 +59,17 @@ Your Azure AD app registration needs these Microsoft Graph permissions:
 ## 🚀 Setup
 
 ### 1. Environment Setup
-
 ```bash
 # Clone or navigate to the project directory
-cd Commercial_ACA_taskforce
+cd onelake-migration-case-study
 
 # Create conda environment
 make env-create
-# OR manually:
-# conda env create -f environment.yml
+# OR manually
+conda env create -f environment.yml
 
 # Activate environment
-conda activate aca_taskforce_env
+conda activate onelake-migration
 ```
 
 ### 2. Azure App Registration
@@ -78,6 +83,9 @@ conda activate aca_taskforce_env
 
 2. **Configure Permissions**:
    - Go to "API permissions"
+   - Add permission → Microsoft Graph → Application permissions
+   - Add: `Sites.Read.All`, `Files.Read.All`
+   - Click "Grant admin consent"
    - Add permission → Microsoft Graph → Application permissions
    - Add: `Sites.Read.All`, `Files.Read.All`
    - Click "Grant admin consent"
@@ -150,17 +158,26 @@ make env-activate  # Show activation command
 make download      # Run download script
 ```
 
-### Manual Execution
+### Manual Execution & Orchestrated Runs
 
 ```bash
 # Activate environment
-conda activate aca_taskforce_env
+conda activate onelake-migration
 
 # Run the standard script
-python dll_pdf_fabric.py
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric.py
 
 # Run the turbo script (see Speed Optimization section)
-python dll_pdf_fabric_turbo.py --conservative
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --conservative
+
+# Orchestrated small test (download 25, upload 25 new)
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-limit 25 --upload-limit 25 --enable-resume-chunks --report-json run_smoke.json
+
+# Download new files only (skip upload phase)
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --download-new-only --download-limit 100 --skip-upload
+
+# Upload only (previous downloads exist)
+conda run -n onelake-migration python -m onelake_migration.orchestration.orchestrator --skip-download --upload-limit 100 --enable-resume-chunks
 ```
 
 ## 🚀 Speed Optimization
@@ -192,10 +209,10 @@ make run-turbo-fast
 make run-turbo           # Maximum speed
 
 # Direct execution with options
-python dll_pdf_fabric_turbo.py --conservative
-python dll_pdf_fabric_turbo.py --normal
-python dll_pdf_fabric_turbo.py --fast
-python dll_pdf_fabric_turbo.py --turbo
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --conservative
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --normal
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --fast
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric_turbo.py --turbo
 
 # View speed comparison
 make compare-speeds
@@ -225,10 +242,10 @@ make refresh
 # Clear cache and force fresh scan
 make clear-cache
 # or directly
-python dll_pdf_fabric.py --clear-cache
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric.py --clear-cache
 
 # View help and options
-python dll_pdf_fabric.py --help
+conda run -n onelake-migration python src/sharepoint/dll_pdf_fabric.py --help
 ```
 
 **Cache Files:**
@@ -249,7 +266,7 @@ The file list cache is automatically validated and refreshed if:
 - Automatic detection of new files after 24 hours
 - Manual refresh option for immediate new file detection
 
-### Script Output
+### Script Output (Downloader Example)
 
 The script provides detailed logging:
 
@@ -310,7 +327,7 @@ To run automatically, use Windows Task Scheduler:
 
 3. **Configure Action**:
    - Program: `C:\path\to\conda.exe`
-   - Arguments: `run -n aca_taskforce_env python C:\path\to\dll_pdf_fabric.py`
+   - Arguments: `run -n onelake-migration python C:\path\to\src\sharepoint\dll_pdf_fabric.py`
    - Start in: `C:\path\to\Commercial_ACA_taskforce`
 
 ## 🔍 Troubleshooting
@@ -354,7 +371,7 @@ ModuleNotFoundError: No module named 'requests'
 # Recreate environment
 make env-clean
 make env-create
-conda activate aca_taskforce_env
+conda activate onelake-migration
 ```
 
 ### Debug Mode
@@ -365,29 +382,35 @@ Enable detailed debugging by modifying the script:
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 ```
 
-## 📁 File Structure
+## 📁 File Structure (Download + Upload + Orchestrator Context)
 
 ```
 Commercial_ACA_taskforce/
-├── dll_pdf_fabric.py          # Standard download script (sequential)
-├── dll_pdf_fabric_turbo.py    # Turbo download script (parallel)
-├── environment.yml            # Conda environment definition
-├── Makefile                   # Automation commands
-├── .env                       # Configuration (create from template)
-├── .env.template              # Configuration template
-├── .env.example               # Example configuration
-├── README.md                  # This documentation
-├── QUICK_START.md             # Quick setup guide
-├── file_list_cache.json       # File list cache (auto-generated)
-├── download_progress.json     # Progress tracking (auto-generated)
-└── downloaded_files/          # Downloaded files (created automatically)
-    ├── Folder1/
-    │   ├── file1.pdf
-    │   └── file2.docx
-    └── Folder2/
-        └── subfolder/
-            └── file3.xlsx
+├── dll_pdf_fabric.py                 # Standard download script (sequential)
+├── dll_pdf_fabric_turbo.py           # Turbo download script (parallel)
+├── src/fabric/onelake_migrator_turbo_fixed.py  # Optimized OneLake streaming uploader
+├── environment.yml                   # Conda environment definition
+├── Makefile                          # Automation commands
+├── .env / .env.template / .env.example
+├── QUICK_START.md                    # Quick setup guide
+├── file_list_cache.json              # Download phase file list cache
+├── download_progress.json            # Legacy progress tracking (sequential)
+├── download_progress_turbo.json      # Turbo progress tracking
+├── migration_progress_optimized.json # OneLake upload progress (hash + size per file, normalized metrics)
+├── (orchestrator via module path)     # python -m onelake_migration.orchestration.orchestrator
+└── downloaded_files/                 # Downloaded files (created automatically)
+      └── ...
 ```
+
+### OneLake Upload (Post-Download)
+After downloads complete:
+```bash
+conda run -n onelake-migration python src/fabric/onelake_migrator_turbo_fixed.py \
+   --source ./downloaded_files --enable-resume-chunks --precreate-dirs
+```
+Progress & integrity details (including per-file SHA256, `successful_this_run`, normalized `processed_files`) stored in `migration_progress_optimized.json`.
+
+See `FLAGS_REFERENCE.md` for a complete matrix of downloader, migrator, and orchestrator flags plus metric definitions.
 
 ## 🔒 Security Notes
 
@@ -423,6 +446,6 @@ For issues or questions:
 
 ---
 
-**Last Updated**: August 7, 2025  
-**Version**: 1.0  
+**Last Updated**: September 10, 2025  
+**Version**: 1.1  
 **Author**: Sanmi Ibitoye for : Commercial ACA Taskforce
